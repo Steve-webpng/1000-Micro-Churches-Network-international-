@@ -1,3 +1,6 @@
+
+import { User as SupabaseUser } from '@supabase/supabase-js';
+
 export enum Page {
   HOME = 'HOME',
   SERMONS = 'SERMONS',
@@ -18,13 +21,19 @@ export enum UserRole {
   GUEST = 'GUEST'
 }
 
+// Extend Supabase User
+export interface AuthUser extends SupabaseUser {
+  // Add any custom properties if needed, mostly likely stored in a separate 'profiles' table
+}
+
 export interface User {
   name: string;
+  email?: string;
   savedSermonIds: string[];
 }
 
 export interface Sermon {
-  id: string;
+  id: string; // UUID
   title: string;
   speaker: string;
   series?: string;
@@ -32,23 +41,26 @@ export interface Sermon {
   description: string;
   imageUrl: string;
   videoUrl?: string;
+  created_at?: string;
 }
 
 export interface Event {
-  id: string;
+  id: string; // UUID
   title: string;
   date: string;
   location: string;
   description: string;
+  created_at?: string;
 }
 
 export interface Meeting {
-  id: string;
+  id: string; // UUID
   title: string;
   host: string;
   startTime: string;
   description: string;
   participants: number;
+  created_at?: string;
 }
 
 export interface LiveParticipant {
@@ -59,13 +71,14 @@ export interface LiveParticipant {
 }
 
 export interface PrayerRequest {
-  id: string;
+  id: string; // UUID
   name: string;
   content: string;
   status: 'PENDING' | 'APPROVED';
   aiResponse?: string;
   date: string;
   prayerCount: number;
+  created_at?: string;
 }
 
 export interface SearchResult {
@@ -84,29 +97,33 @@ export interface ChatMessage {
 }
 
 export interface SlideshowImage {
-  id: string;
+  id: string; // UUID
   url: string;
   caption?: string;
+  created_at?: string;
 }
 
 export interface ChurchBranch {
-  id: string;
+  id: string; // UUID
   name: string;
   leader: string;
   address: string;
   lat: number;
   lng: number;
   radius: number;
+  created_at?: string;
 }
 
 export interface Photo {
-  id: string;
+  id: string; // UUID
   url: string;
   caption?: string;
+  created_at?: string;
 }
 
 export interface PhotoAlbum {
-  id: string;
+  id: string; // UUID
   title: string;
   photos: Photo[];
+  created_at?: string;
 }

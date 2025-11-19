@@ -1,5 +1,6 @@
+
 import React, { useState, useEffect, memo } from 'react';
-import { PhotoAlbum, Photo } from '../types';
+import { PhotoAlbum } from '../types';
 import { IconGallery, IconChevronLeft, IconChevronRight, IconX } from '../components/Icons';
 
 interface GalleryPageProps {
@@ -39,7 +40,7 @@ const GalleryPage: React.FC<GalleryPageProps> = ({ albums }) => {
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [lightbox.album]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [lightbox.album]); 
 
 
     return (

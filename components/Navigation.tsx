@@ -1,12 +1,14 @@
+
 import React from 'react';
-import { Page, User, UserRole } from '../types';
-import { IconHome, IconSermon, IconEvent, IconMeeting, IconPrayer, IconAdmin, IconSearch, IconSun, IconMoon, IconArrowLeft, IconMap, IconGallery, IconUser } from './Icons';
+import { Page, UserRole, User } from '../types';
+import { IconHome, IconSermon, IconEvent, IconMeeting, IconPrayer, IconSearch, IconSun, IconMoon, IconArrowLeft, IconMap, IconGallery, IconUser } from './Icons';
 
 interface NavigationProps {
   activePage: Page;
   setPage: (page: Page) => void;
-  role: UserRole | null; // For admin
-  currentUser: User | null; // For general user
+  role: UserRole | null;
+  currentUser: User | null;
+  supabaseUser: any;
   onLogout: () => void;
   darkMode: boolean;
   setDarkMode: (dark: boolean) => void;
@@ -14,7 +16,7 @@ interface NavigationProps {
   goBack: () => void;
 }
 
-const Navigation: React.FC<NavigationProps> = ({ activePage, setPage, role, currentUser, onLogout, darkMode, setDarkMode, canGoBack, goBack }) => {
+const Navigation: React.FC<NavigationProps> = ({ activePage, setPage, role, currentUser, supabaseUser, onLogout, darkMode, setDarkMode, canGoBack, goBack }) => {
 
   const navItems = [
     { page: Page.HOME, icon: <IconHome className="w-6 h-6" />, label: 'Home' },
@@ -73,20 +75,14 @@ const Navigation: React.FC<NavigationProps> = ({ activePage, setPage, role, curr
           
           <div className="w-px h-6 bg-slate-200 dark:bg-slate-700"></div>
 
-          {currentUser ? (
+          {supabaseUser ? (
              <button onClick={() => setPage(Page.PROFILE)} className="flex items-center gap-2 text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-primary-600 dark:hover:text-primary-500">
                 <IconUser className="w-5 h-5" />
-                <span>{currentUser.name}</span>
+                <span>{currentUser?.name || 'Profile'}</span>
              </button>
           ) : (
             <button onClick={() => setPage(Page.PROFILE)} className="text-sm text-slate-500 hover:text-primary-600 dark:text-slate-300 dark:hover:text-primary-500">
               Login
-            </button>
-          )}
-
-          {role && (
-            <button onClick={() => setPage(Page.ADMIN)} className="text-sm font-semibold text-primary-700 dark:text-primary-500 hover:underline">
-              Dashboard
             </button>
           )}
         </div>
@@ -95,7 +91,7 @@ const Navigation: React.FC<NavigationProps> = ({ activePage, setPage, role, curr
       {/* Mobile Bottom Nav */}
       <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 shadow-lg z-50 pb-safe">
         <div className="flex justify-around items-center py-3">
-          {navItems.slice(0, 4).map((item) => (
+          {navItems.slice(0, 5).map((item) => (
             <button
               key={item.label}
               onClick={() => setPage(item.page)}
@@ -114,7 +110,7 @@ const Navigation: React.FC<NavigationProps> = ({ activePage, setPage, role, curr
               }`}
           >
              <IconUser className="w-6 h-6" />
-            <span className="text-[10px] font-medium">{currentUser ? 'Profile' : 'Login'}</span>
+            <span className="text-[10px] font-medium">{supabaseUser ? 'Profile' : 'Login'}</span>
           </button>
         </div>
       </div>

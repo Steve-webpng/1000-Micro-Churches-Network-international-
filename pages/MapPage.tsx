@@ -1,6 +1,6 @@
+
 import React, { useState, useEffect, memo } from 'react';
 import { ChurchBranch } from '../types';
-import { IconMapPin } from '../components/Icons';
 
 declare global {
   interface Window {

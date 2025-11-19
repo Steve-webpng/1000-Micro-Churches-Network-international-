@@ -1,7 +1,9 @@
+
 import React, { useState, memo } from 'react';
 import { Page, UserRole, PrayerRequest, Sermon, Event, Meeting, SlideshowImage, ChurchBranch, PhotoAlbum, Photo } from '../types';
 import { seedSermons, seedEvents } from '../services/geminiService';
 import { IconTrash, IconPlus, IconLoader } from '../components/Icons';
+import { supabase } from '../services/supabaseClient';
 
 interface AdminPageProps {
   userRole: UserRole | null;
@@ -23,21 +25,27 @@ interface AdminPageProps {
   photoAlbums: PhotoAlbum[];
   setPhotoAlbums: React.Dispatch<React.SetStateAction<PhotoAlbum[]>>;
   addToast: (message: string) => void;
+  supabaseUser: any;
+  fetchData: () => void;
 }
 
 const AdminPage: React.FC<AdminPageProps> = (props) => {
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+  const [authError, setAuthError] = useState('');
   const [activeTab, setActiveTab] = useState('Dashboard');
+  const [authLoading, setAuthLoading] = useState(false);
 
-  const handlePasswordSubmit = (e: React.FormEvent) => {
+  const handleAdminAuth = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (password === '12345678') {
-      props.handleLogin(UserRole.ADMIN);
-      setError('');
+    setAuthLoading(true);
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) {
+        setAuthError(error.message);
     } else {
-      setError('Incorrect password');
+        props.handleLogin(UserRole.ADMIN);
     }
+    setAuthLoading(false);
   };
 
   const renderContent = () => {
@@ -50,30 +58,35 @@ const AdminPage: React.FC<AdminPageProps> = (props) => {
         case 'Slideshow': return <SlideshowManagement {...props} />;
         case 'Gallery': return <GalleryManagement {...props} />;
         case 'Branches': return <BranchManagement {...props} />;
-        case 'Settings': return <Settings {...props} />;
         default: return null;
     }
   };
 
-  if (!props.userRole) {
+  if (!props.supabaseUser) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
-        <form onSubmit={handlePasswordSubmit} className="bg-white dark:bg-slate-800 p-8 rounded-xl shadow-2xl w-full max-w-sm animate-fade-in">
+        <form onSubmit={handleAdminAuth} className="bg-white dark:bg-slate-800 p-8 rounded-xl shadow-2xl w-full max-w-sm animate-fade-in">
           <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100 mb-2">Admin Login</h2>
-          <p className="text-slate-500 dark:text-slate-400 mb-6">Enter password to access dashboard.</p>
-          <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Password" className="w-full border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 rounded-lg p-3 mb-4 focus:ring-2 focus:ring-primary-500 outline-none" />
-          {error && <p className="text-red-500 text-sm mb-4">{error}</p>}
-          <button type="submit" className="w-full bg-primary-600 text-white py-3 rounded-lg font-bold hover:bg-primary-700">Login</button>
+          <p className="text-slate-500 dark:text-slate-400 mb-6">Sign in with your Supabase credentials.</p>
+          <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="Email" required className="w-full border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 rounded-lg p-3 mb-4 focus:ring-2 focus:ring-primary-500 outline-none" />
+          <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Password" required className="w-full border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 rounded-lg p-3 mb-4 focus:ring-2 focus:ring-primary-500 outline-none" />
+          {authError && <p className="text-red-500 text-sm mb-4">{authError}</p>}
+          <button type="submit" disabled={authLoading} className="w-full bg-primary-600 text-white py-3 rounded-lg font-bold hover:bg-primary-700 disabled:opacity-50">
+              {authLoading ? 'Signing in...' : 'Login'}
+          </button>
         </form>
       </div>
     );
   }
 
-  const tabs = ['Dashboard', 'Prayers', 'Sermons', 'Events', 'Meetings', 'Slideshow', 'Gallery', 'Branches', 'Settings'];
+  const tabs = ['Dashboard', 'Prayers', 'Sermons', 'Events', 'Meetings', 'Slideshow', 'Gallery', 'Branches'];
 
   return (
     <div className="container mx-auto p-6 animate-fade-in">
-        <h1 className="text-3xl font-bold mb-6">Admin Dashboard</h1>
+        <div className="flex justify-between items-center mb-6">
+            <h1 className="text-3xl font-bold">Admin Dashboard</h1>
+            <button onClick={() => supabase.auth.signOut()} className="text-red-500 text-sm">Sign Out</button>
+        </div>
         <div className="flex border-b border-slate-200 dark:border-slate-700 mb-6 overflow-x-auto">
             {tabs.map(tab => (
                 <button key={tab} onClick={() => setActiveTab(tab)} className={`px-4 py-2 text-sm font-medium whitespace-nowrap ${activeTab === tab ? 'border-b-2 border-primary-500 text-primary-600 dark:text-primary-400' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'}`}>
@@ -86,7 +99,6 @@ const AdminPage: React.FC<AdminPageProps> = (props) => {
   );
 };
 
-// ... Sub-components for each tab
 const Dashboard: React.FC<AdminPageProps> = ({ prayers, sermons, events, meetings }) => (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <div className="bg-white dark:bg-slate-800 p-6 rounded-lg shadow-md">
@@ -108,16 +120,18 @@ const Dashboard: React.FC<AdminPageProps> = ({ prayers, sermons, events, meeting
     </div>
 );
 
-const PrayerManagement: React.FC<AdminPageProps> = ({ prayers, setPrayers, addToast }) => {
+const PrayerManagement: React.FC<AdminPageProps> = ({ prayers, setPrayers, addToast, fetchData }) => {
   const pendingPrayers = prayers.filter(p => p.status === 'PENDING');
 
-  const handleApprove = (id: string) => {
-    setPrayers(prev => prev.map(p => p.id === id ? { ...p, status: 'APPROVED' } : p));
+  const handleApprove = async (id: string) => {
+    await supabase.from('prayers').update({ status: 'APPROVED' }).eq('id', id);
+    fetchData();
     addToast("Prayer request approved.");
   };
 
-  const handleDelete = (id: string) => {
-    setPrayers(prev => prev.filter(p => p.id !== id));
+  const handleDelete = async (id: string) => {
+    await supabase.from('prayers').delete().eq('id', id);
+    fetchData();
     addToast("Prayer request deleted.");
   };
   
@@ -141,55 +155,47 @@ const PrayerManagement: React.FC<AdminPageProps> = ({ prayers, setPrayers, addTo
   );
 };
 
-const ImageUploader: React.FC<{onImageSelect: (base64: string) => void}> = ({ onImageSelect }) => {
-    const [uploadType, setUploadType] = useState<'file' | 'url'>('file');
-    const [imageUrl, setImageUrl] = useState('');
+const ImageUploader: React.FC<{onImageSelect: (url: string) => void}> = ({ onImageSelect }) => {
+    const [uploading, setUploading] = useState(false);
     const [preview, setPreview] = useState<string | null>(null);
     const fileInputRef = React.useRef<HTMLInputElement>(null);
 
-    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
-        if (file) {
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                const base64String = reader.result as string;
-                setPreview(base64String);
-                onImageSelect(base64String);
-            };
-            reader.readAsDataURL(file);
+        if (!file) return;
+
+        setUploading(true);
+        try {
+            const fileExt = file.name.split('.').pop();
+            const fileName = `${Date.now()}.${fileExt}`;
+            const { error: uploadError } = await supabase.storage.from('images').upload(fileName, file);
+
+            if (uploadError) throw uploadError;
+
+            const { data } = supabase.storage.from('images').getPublicUrl(fileName);
+            setPreview(data.publicUrl);
+            onImageSelect(data.publicUrl);
+        } catch (error) {
+            console.error('Error uploading image:', error);
+            alert('Error uploading image. Ensure you have a public "images" bucket.');
+        } finally {
+            setUploading(false);
         }
     };
     
-    const handleUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-      const url = e.target.value;
-      setImageUrl(url);
-      setPreview(url);
-      onImageSelect(url);
-    };
-
     return (
         <div>
-            <div className="flex items-center gap-2 mb-2">
-                <button type="button" onClick={() => setUploadType('file')} className={`text-sm px-3 py-1 rounded-full ${uploadType === 'file' ? 'bg-primary-500 text-white' : 'bg-slate-200 dark:bg-slate-700'}`}>Upload File</button>
-                <button type="button" onClick={() => setUploadType('url')} className={`text-sm px-3 py-1 rounded-full ${uploadType === 'url' ? 'bg-primary-500 text-white' : 'bg-slate-200 dark:bg-slate-700'}`}>From URL</button>
-            </div>
-            {uploadType === 'file' ? (
-                <>
-                    <input type="file" accept="image/*" onChange={handleFileChange} className="hidden" ref={fileInputRef} />
-                    <button type="button" onClick={() => fileInputRef.current?.click()} className="w-full text-sm border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-lg p-3 hover:border-primary-500">
-                        Choose Image...
-                    </button>
-                </>
-            ) : (
-                <input type="url" placeholder="https://example.com/image.png" value={imageUrl} onChange={handleUrlChange} className="w-full text-sm bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg p-3" />
-            )}
+            <input type="file" accept="image/*" onChange={handleFileChange} className="hidden" ref={fileInputRef} />
+            <button type="button" onClick={() => fileInputRef.current?.click()} disabled={uploading} className="w-full text-sm border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-lg p-3 hover:border-primary-500 disabled:opacity-50">
+                {uploading ? <IconLoader className="w-5 h-5 mx-auto" /> : 'Upload Image'}
+            </button>
             {preview && <img src={preview} alt="Preview" className="mt-2 rounded-lg max-h-32" />}
         </div>
     );
 };
 
 
-const SermonManagement: React.FC<AdminPageProps> = ({ sermons, setSermons, addToast }) => {
+const SermonManagement: React.FC<AdminPageProps> = ({ sermons, setSermons, addToast, fetchData }) => {
   const [form, setForm] = useState({ title: '', speaker: '', series: '', date: '', description: '', imageUrl: '', videoUrl: '' });
   const [isSeeding, setIsSeeding] = useState(false);
 
@@ -197,27 +203,32 @@ const SermonManagement: React.FC<AdminPageProps> = ({ sermons, setSermons, addTo
     setForm({ ...form, [e.target.name]: e.target.value });
   };
   
-  const handleImageSelect = (base64: string) => {
-    setForm({...form, imageUrl: base64});
+  const handleImageSelect = (url: string) => {
+    setForm({...form, imageUrl: url});
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const newSermon: Sermon = { ...form, id: Date.now().toString() };
-    setSermons(prev => [newSermon, ...prev]);
-    setForm({ title: '', speaker: '', series: '', date: '', description: '', imageUrl: '', videoUrl: '' });
-    addToast("Sermon added.");
+    const { error } = await supabase.from('sermons').insert([form]);
+    if (error) {
+        addToast("Error adding sermon.");
+    } else {
+        fetchData();
+        setForm({ title: '', speaker: '', series: '', date: '', description: '', imageUrl: '', videoUrl: '' });
+        addToast("Sermon added.");
+    }
   };
 
-  const handleDelete = (id: string) => {
-    setSermons(prev => prev.filter(s => s.id !== id));
+  const handleDelete = async (id: string) => {
+    await supabase.from('sermons').delete().eq('id', id);
+    fetchData();
     addToast("Sermon deleted.");
   };
   
   const handleSeed = async () => {
       setIsSeeding(true);
       const newSermons = await seedSermons();
-      setSermons(prev => [...newSermons, ...prev]);
+      fetchData();
       setIsSeeding(false);
       addToast(`${newSermons.length} new sermons seeded.`);
   };
@@ -231,6 +242,7 @@ const SermonManagement: React.FC<AdminPageProps> = ({ sermons, setSermons, addTo
         <input name="series" value={form.series} onChange={handleChange} placeholder="Sermon Series (Optional)" className="w-full text-sm bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg p-3"/>
         <input name="date" type="date" value={form.date} onChange={handleChange} required className="w-full text-sm bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg p-3"/>
         <textarea name="description" value={form.description} onChange={handleChange} placeholder="Description" required className="w-full text-sm bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg p-3"></textarea>
+        <label className="block text-sm font-medium">Cover Image</label>
         <ImageUploader onImageSelect={handleImageSelect} />
         <input name="videoUrl" value={form.videoUrl} onChange={handleChange} placeholder="YouTube URL (Optional)" className="w-full text-sm bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg p-3"/>
         <button type="submit" className="w-full bg-primary-600 text-white py-2 rounded-lg font-bold">Add Sermon</button>
@@ -262,29 +274,30 @@ const SermonManagement: React.FC<AdminPageProps> = ({ sermons, setSermons, addTo
 };
 
 
-const EventManagement: React.FC<AdminPageProps> = ({ events, setEvents, addToast }) => {
+const EventManagement: React.FC<AdminPageProps> = ({ events, setEvents, addToast, fetchData }) => {
     const [form, setForm] = useState({ title: '', date: '', location: '', description: ''});
     const [isSeeding, setIsSeeding] = useState(false);
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
       e.preventDefault();
-      const newEvent: Event = { ...form, id: Date.now().toString() };
-      setEvents(prev => [newEvent, ...prev]);
+      await supabase.from('events').insert([form]);
+      fetchData();
       setForm({ title: '', date: '', location: '', description: '' });
       addToast("Event added.");
     };
 
-    const handleDelete = (id: string) => {
-        setEvents(prev => prev.filter(item => item.id !== id));
+    const handleDelete = async (id: string) => {
+        await supabase.from('events').delete().eq('id', id);
+        fetchData();
         addToast("Event deleted.");
     };
 
     const handleSeed = async () => {
       setIsSeeding(true);
-      const newEvents = await seedEvents();
-      setEvents(prev => [...newEvents, ...prev]);
+      await seedEvents();
+      fetchData();
       setIsSeeding(false);
-      addToast(`${newEvents.length} new events seeded.`);
+      addToast(`Events seeded.`);
     };
 
     return (
@@ -320,19 +333,20 @@ const EventManagement: React.FC<AdminPageProps> = ({ events, setEvents, addToast
     );
 };
 
-const MeetingManagement: React.FC<AdminPageProps> = ({ meetings, setMeetings, addToast }) => {
+const MeetingManagement: React.FC<AdminPageProps> = ({ meetings, setMeetings, addToast, fetchData }) => {
     const [form, setForm] = useState({ title: '', host: '', startTime: '', description: '' });
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
       e.preventDefault();
-      const newMeeting: Meeting = { ...form, id: Date.now().toString(), participants: 1 };
-      setMeetings(prev => [newMeeting, ...prev]);
+      await supabase.from('meetings').insert([{...form, participants: 1}]);
+      fetchData();
       setForm({ title: '', host: '', startTime: '', description: '' });
       addToast("Meeting scheduled.");
     };
 
-    const handleDelete = (id: string) => {
-        setMeetings(prev => prev.filter(item => item.id !== id));
+    const handleDelete = async (id: string) => {
+        await supabase.from('meetings').delete().eq('id', id);
+        fetchData();
         addToast("Meeting deleted.");
     };
     
@@ -364,21 +378,22 @@ const MeetingManagement: React.FC<AdminPageProps> = ({ meetings, setMeetings, ad
     );
 };
 
-const SlideshowManagement: React.FC<AdminPageProps> = ({ slideshowImages, setSlideshowImages, addToast }) => {
+const SlideshowManagement: React.FC<AdminPageProps> = ({ slideshowImages, setSlideshowImages, addToast, fetchData }) => {
     const [caption, setCaption] = useState('');
     const [image, setImage] = useState('');
 
-    const handleAdd = () => {
+    const handleAdd = async () => {
         if(!image) return addToast("Please select an image first.");
-        const newImage: SlideshowImage = { id: Date.now().toString(), url: image, caption };
-        setSlideshowImages(prev => [...prev, newImage]);
+        await supabase.from('slideshow_images').insert([{ url: image, caption }]);
+        fetchData();
         setCaption('');
         setImage('');
         addToast("Image added to slideshow.");
     };
     
-    const handleDelete = (id: string) => {
-        setSlideshowImages(prev => prev.filter(img => img.id !== id));
+    const handleDelete = async (id: string) => {
+        await supabase.from('slideshow_images').delete().eq('id', id);
+        fetchData();
         addToast("Image removed from slideshow.");
     };
 
@@ -407,40 +422,38 @@ const SlideshowManagement: React.FC<AdminPageProps> = ({ slideshowImages, setSli
     );
 };
 
-const GalleryManagement: React.FC<AdminPageProps> = ({ photoAlbums, setPhotoAlbums, addToast }) => {
+const GalleryManagement: React.FC<AdminPageProps> = ({ photoAlbums, setPhotoAlbums, addToast, fetchData }) => {
   const [newAlbumTitle, setNewAlbumTitle] = useState('');
   const [selectedAlbumId, setSelectedAlbumId] = useState<string | null>(null);
   const [photoCaption, setPhotoCaption] = useState('');
   const [photoImage, setPhotoImage] = useState('');
 
-  const handleAddAlbum = () => {
+  const handleAddAlbum = async () => {
     if (!newAlbumTitle.trim()) return;
-    const newAlbum: PhotoAlbum = { id: Date.now().toString(), title: newAlbumTitle, photos: [] };
-    setPhotoAlbums(prev => [newAlbum, ...prev]);
+    await supabase.from('photo_albums').insert([{ title: newAlbumTitle }]);
+    fetchData();
     setNewAlbumTitle('');
     addToast("Photo album created.");
   };
   
-  const handleDeleteAlbum = (id: string) => {
-      setPhotoAlbums(prev => prev.filter(a => a.id !== id));
+  const handleDeleteAlbum = async (id: string) => {
+      await supabase.from('photo_albums').delete().eq('id', id);
+      fetchData();
       addToast("Album deleted.");
   };
   
-  const handleAddPhoto = () => {
+  const handleAddPhoto = async () => {
       if(!selectedAlbumId || !photoImage) return;
-      const newPhoto: Photo = { id: Date.now().toString(), url: photoImage, caption: photoCaption };
-      setPhotoAlbums(prev => prev.map(album => 
-          album.id === selectedAlbumId ? { ...album, photos: [...album.photos, newPhoto] } : album
-      ));
+      await supabase.from('photos').insert([{ url: photoImage, caption: photoCaption, album_id: selectedAlbumId }]);
+      fetchData();
       setPhotoImage('');
       setPhotoCaption('');
       addToast("Photo added to album.");
   };
   
-  const handleDeletePhoto = (albumId: string, photoId: string) => {
-      setPhotoAlbums(prev => prev.map(album => 
-          album.id === albumId ? { ...album, photos: album.photos.filter(p => p.id !== photoId) } : album
-      ));
+  const handleDeletePhoto = async (photoId: string) => {
+      await supabase.from('photos').delete().eq('id', photoId);
+      fetchData();
   };
   
   return (
@@ -473,7 +486,7 @@ const GalleryManagement: React.FC<AdminPageProps> = ({ photoAlbums, setPhotoAlbu
                                   <div key={photo.id} className="relative group aspect-square">
                                       <img src={photo.url} alt={photo.caption} className="w-full h-full object-cover rounded"/>
                                       <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
-                                          <button onClick={() => handleDeletePhoto(album.id, photo.id)} className="text-white bg-red-500/80 p-2 rounded-full"><IconTrash className="w-4 h-4"/></button>
+                                          <button onClick={() => handleDeletePhoto(photo.id)} className="text-white bg-red-500/80 p-2 rounded-full"><IconTrash className="w-4 h-4"/></button>
                                       </div>
                                   </div>
                               ))}
@@ -486,28 +499,27 @@ const GalleryManagement: React.FC<AdminPageProps> = ({ photoAlbums, setPhotoAlbu
   );
 };
 
-const BranchManagement: React.FC<AdminPageProps> = ({ branches, setBranches, addToast }) => {
-    // Implement management UI for Church Branches
+const BranchManagement: React.FC<AdminPageProps> = ({ branches, setBranches, addToast, fetchData }) => {
     const [form, setForm] = useState({ name: '', leader: '', address: '', lat: '', lng: '', radius: '5000' });
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => setForm({...form, [e.target.name]: e.target.value });
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        const newBranch: ChurchBranch = {
-            id: Date.now().toString(),
+        await supabase.from('church_branches').insert([{
             name: form.name,
             leader: form.leader,
             address: form.address,
             lat: parseFloat(form.lat),
             lng: parseFloat(form.lng),
             radius: parseInt(form.radius, 10),
-        };
-        setBranches(prev => [newBranch, ...prev]);
+        }]);
+        fetchData();
         addToast("Branch added.");
         setForm({ name: '', leader: '', address: '', lat: '', lng: '', radius: '5000' });
     };
 
-    const handleDelete = (id: string) => {
-        setBranches(prev => prev.filter(b => b.id !== id));
+    const handleDelete = async (id: string) => {
+        await supabase.from('church_branches').delete().eq('id', id);
+        fetchData();
         addToast("Branch deleted.");
     };
 
@@ -537,34 +549,6 @@ const BranchManagement: React.FC<AdminPageProps> = ({ branches, setBranches, add
                         </div>
                     ))}
                  </div>
-            </div>
-        </div>
-    );
-};
-
-
-const Settings: React.FC<AdminPageProps> = ({ verse, setVerse, addToast }) => {
-    const [tempVerse, setTempVerse] = useState(verse?.text || '');
-    const [tempRef, setTempRef] = useState(verse?.ref || '');
-
-    const handleUpdate = () => {
-        setVerse({text: tempVerse, ref: tempRef});
-        addToast("Verse of the day updated.");
-    };
-
-    return (
-        <div className="bg-white dark:bg-slate-800 p-6 rounded-lg shadow-md max-w-lg">
-            <h2 className="text-xl font-bold mb-4">Site Settings</h2>
-            <div className="space-y-4">
-                <div>
-                    <label className="block text-sm font-medium mb-1">Verse of the Day</label>
-                    <textarea value={tempVerse} onChange={e => setTempVerse(e.target.value)} rows={3} className="w-full text-sm bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg p-3"></textarea>
-                </div>
-                 <div>
-                    <label className="block text-sm font-medium mb-1">Reference</label>
-                    <input value={tempRef} onChange={e => setTempRef(e.target.value)} className="w-full text-sm bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg p-3" />
-                </div>
-                <button onClick={handleUpdate} className="bg-primary-600 text-white px-4 py-2 rounded-lg font-bold">Update Verse</button>
             </div>
         </div>
     );

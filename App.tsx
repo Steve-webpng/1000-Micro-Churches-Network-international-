@@ -1,7 +1,9 @@
+
 import React, { useState, useEffect, useCallback, memo } from 'react';
 import Navigation from './components/Navigation';
 import { Page, UserRole, Sermon, Event, PrayerRequest, Meeting, SlideshowImage, ChurchBranch, User, PhotoAlbum } from './types';
-import { getVerseOfDay, seedSermons, seedEvents, generatePrayerResponse } from './services/geminiService';
+import { getVerseOfDay, generatePrayerResponse } from './services/geminiService';
+import { supabase } from './services/supabaseClient';
 import Meetings from './pages/Meetings';
 import HomePage from './pages/HomePage';
 import SermonsPage from './pages/SermonsPage';
@@ -12,67 +14,126 @@ import SearchPage from './pages/SearchPage';
 import MapPage from './pages/MapPage';
 import ProfilePage from './pages/ProfilePage';
 import GalleryPage from './pages/GalleryPage';
-import { IconX, IconArrowUp } from './components/Icons';
+import { IconX, IconArrowUp, IconLoader } from './components/Icons';
 
-// Simple localStorage wrapper with error handling
-const useStickyState = <T,>(key: string, defaultValue: T): [T, React.Dispatch<React.SetStateAction<T>>] => {
-  const [state, setState] = useState<T>(() => {
-    try {
-      const stickyValue = window.localStorage.getItem(key);
-      return stickyValue !== null ? JSON.parse(stickyValue) : defaultValue;
-    } catch (error) {
-      console.warn(`Error parsing localStorage key "${key}":`, error);
-      return defaultValue;
-    }
-  });
-  useEffect(() => {
-    window.localStorage.setItem(key, JSON.stringify(state));
-  }, [key, state]);
-  return [state, setState];
-};
-
-const initialSlideshowImages: SlideshowImage[] = [
-    { id: '1', url: 'https://images.unsplash.com/photo-1507692049484-3a5f6d70a255?q=80&w=2070&auto=format&fit=crop', caption: 'Gathered in Worship' },
-    { id: '2', url: 'https://images.unsplash.com/photo-1543825122-38634563a55a?q=80&w=2070&auto=format&fit=crop', caption: 'Community Fellowship' },
-    { id: '3', url: 'https://images.unsplash.com/photo-1518018863046-562b7b51b279?q=80&w=1943&auto=format&fit=crop', caption: 'Hearing the Word' },
-];
-
-const initialBranches: ChurchBranch[] = [
-    { id: 'b1', name: 'Kampala Central Branch', leader: 'John Doe', address: '123 Main St, Kampala', lat: 0.347596, lng: 32.582520, radius: 5000 },
-    { id: 'b2', name: 'Gulu Northern Branch', leader: 'Jane Smith', address: '456 Gulu Ave, Gulu', lat: 2.7745, lng: 32.2889, radius: 10000 },
-];
-
-// --- MAIN APP COMPONENT ---
 const App: React.FC = () => {
   const [pageHistory, setPageHistory] = useState<Page[]>([Page.HOME]);
   const currentPage = pageHistory[pageHistory.length - 1];
-  const [userRole, setUserRole] = useState<UserRole | null>(null);
-  const [verse, setVerse] = useStickyState<{text: string, ref: string} | null>('verse', null);
-  const [verseLoading, setVerseLoading] = useState(false);
   
-  // Data State
-  const [sermons, setSermons] = useStickyState<Sermon[]>('sermons', []);
-  const [events, setEvents] = useStickyState<Event[]>('events', []);
-  const [meetings, setMeetings] = useStickyState<Meeting[]>('meetings', []);
-  const [prayers, setPrayers] = useStickyState<PrayerRequest[]>('prayers', []);
-  const [slideshowImages, setSlideshowImages] = useStickyState<SlideshowImage[]>('slideshowImages', initialSlideshowImages);
-  const [branches, setBranches] = useStickyState<ChurchBranch[]>('branches', initialBranches);
-  const [photoAlbums, setPhotoAlbums] = useStickyState<PhotoAlbum[]>('photoAlbums', []);
+  const [userRole, setUserRole] = useState<UserRole | null>(null); // Admin Role
+  const [supabaseUser, setSupabaseUser] = useState<any>(null); // Authenticated User
+
+  const [verse, setVerse] = useState<{text: string, ref: string} | null>(null);
+  const [verseLoading, setVerseLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  
+  // Data State (Fetched from Supabase)
+  const [sermons, setSermons] = useState<Sermon[]>([]);
+  const [events, setEvents] = useState<Event[]>([]);
+  const [meetings, setMeetings] = useState<Meeting[]>([]);
+  const [prayers, setPrayers] = useState<PrayerRequest[]>([]);
+  const [slideshowImages, setSlideshowImages] = useState<SlideshowImage[]>([]);
+  const [branches, setBranches] = useState<ChurchBranch[]>([]);
+  const [photoAlbums, setPhotoAlbums] = useState<PhotoAlbum[]>([]);
+
+  // User Data
+  const [currentUserProfile, setCurrentUserProfile] = useState<User | null>(null);
 
   // UI State
   const [videoModal, setVideoModal] = useState<{open: boolean, url: string | null}>({open: false, url: null});
-  const [darkMode, setDarkMode] = useStickyState<boolean>('darkMode', false);
+  const [darkMode, setDarkMode] = useState<boolean>(() => {
+    return localStorage.getItem('darkMode') === 'true';
+  });
   const [toasts, setToasts] = useState<{id: number, message: string}[]>([]);
   const [showBackToTop, setShowBackToTop] = useState(false);
 
-  // User State
-  const [currentUser, setCurrentUser] = useStickyState<User | null>('currentUser', null);
+  // --- SUPABASE FETCHING ---
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    try {
+        const { data: s } = await supabase.from('sermons').select('*').order('created_at', { ascending: false });
+        if (s) setSermons(s);
 
+        const { data: e } = await supabase.from('events').select('*').order('date', { ascending: true });
+        if (e) setEvents(e);
+
+        const { data: m } = await supabase.from('meetings').select('*');
+        if (m) setMeetings(m);
+
+        const { data: p } = await supabase.from('prayers').select('*').order('created_at', { ascending: false });
+        if (p) setPrayers(p);
+
+        const { data: si } = await supabase.from('slideshow_images').select('*');
+        if (si) setSlideshowImages(si);
+
+        const { data: b } = await supabase.from('church_branches').select('*');
+        if (b) setBranches(b);
+        
+        // Fetch Albums and Photos (Complex join simulated for now or simplified structure)
+        // Assuming 'photo_albums' table exists and 'photos' table has 'album_id'
+        const { data: pa } = await supabase.from('photo_albums').select('*');
+        if (pa) {
+            const albumsWithPhotos = await Promise.all(pa.map(async (album: any) => {
+                const { data: photos } = await supabase.from('photos').select('*').eq('album_id', album.id);
+                return { ...album, photos: photos || [] };
+            }));
+            setPhotoAlbums(albumsWithPhotos);
+        }
+
+    } catch (error) {
+        console.error("Error fetching data from Supabase:", error);
+    } finally {
+        setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchData();
+    
+    // Auth Listener
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSupabaseUser(session?.user ?? null);
+      if (session?.user) fetchUserProfile(session.user.id, session.user.email || '');
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSupabaseUser(session?.user ?? null);
+      if (session?.user) fetchUserProfile(session.user.id, session.user.email || '');
+      else setCurrentUserProfile(null);
+    });
+
+    return () => subscription.unsubscribe();
+  }, [fetchData]);
+
+  const fetchUserProfile = async (userId: string, email: string) => {
+      // Fetch saved sermons for this user
+      const { data: saved } = await supabase.from('saved_sermons').select('sermon_id').eq('user_id', userId);
+      const savedIds = saved ? saved.map((item: any) => item.sermon_id) : [];
+      
+      setCurrentUserProfile({
+          name: email.split('@')[0], // Fallback name
+          email: email,
+          savedSermonIds: savedIds
+      });
+  };
+
+  // --- THEMING & SCROLL ---
   useEffect(() => {
     if (darkMode) document.documentElement.classList.add('dark');
     else document.documentElement.classList.remove('dark');
+    localStorage.setItem('darkMode', String(darkMode));
   }, [darkMode]);
   
+  useEffect(() => {
+    const handleScroll = () => setShowBackToTop(window.scrollY > 300);
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  // --- ACTIONS ---
+
   const setPage = useCallback((page: Page) => {
       setPageHistory(prev => [...prev, page]);
       window.scrollTo(0, 0);
@@ -80,18 +141,13 @@ const App: React.FC = () => {
 
   const goBack = useCallback(() => setPageHistory(prev => prev.slice(0, -1)), []);
 
+  // Fetch verse on load if not present
   useEffect(() => {
-    if (!verse) {
+    if (!verse && !verseLoading) {
         setVerseLoading(true);
         getVerseOfDay().then(v => setVerse({ text: v.verse, ref: v.reference })).finally(() => setVerseLoading(false));
     }
-  }, [verse, setVerse]);
-
-  useEffect(() => {
-    const handleScroll = () => setShowBackToTop(window.scrollY > 300);
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
+  }, [verse, verseLoading]);
 
   const addToast = useCallback((message: string) => {
     const id = Date.now();
@@ -101,11 +157,7 @@ const App: React.FC = () => {
 
   const handleShare = useCallback(async (title: string, text: string, url: string) => {
     if (navigator.share) {
-      try {
-        await navigator.share({ title, text, url });
-      } catch (error) {
-        console.error('Error sharing:', error);
-      }
+      try { await navigator.share({ title, text, url }); } catch (error) { console.error('Error sharing:', error); }
     } else {
       navigator.clipboard.writeText(`${title} - ${url}`);
       addToast("Link copied to clipboard!");
@@ -113,59 +165,82 @@ const App: React.FC = () => {
   }, [addToast]);
 
   const handlePrayerSubmit = useCallback(async (name: string, content: string) => {
-    const newPrayer: PrayerRequest = { id: Date.now().toString(), name, content, status: 'PENDING', date: new Date().toISOString(), prayerCount: 0 };
-    setPrayers(prev => [newPrayer, ...prev]);
+    // Insert into Supabase
+    const { data, error } = await supabase.from('prayers').insert([
+        { name, content, status: 'PENDING', prayer_count: 0 }
+    ]).select();
+    
+    if (error) {
+        addToast("Error submitting prayer.");
+        return;
+    }
+    
+    // Optimistic update
+    if (data) setPrayers(prev => [data[0] as unknown as PrayerRequest, ...prev]);
+
+    // AI Response
     const response = await generatePrayerResponse(content);
-    setPrayers(prev => prev.map(p => p.id === newPrayer.id ? { ...p, aiResponse: response } : p));
-  }, [setPrayers]);
+    if (data && data[0]) {
+        await supabase.from('prayers').update({ ai_response: response }).eq('id', data[0].id);
+        // Refresh data
+        fetchData();
+    }
+  }, [addToast, fetchData]);
   
-  const handleUserLogin = useCallback((name: string) => {
-    setCurrentUser({ name, savedSermonIds: [] });
-    addToast(`Welcome, ${name}!`);
-  }, [setCurrentUser, addToast]);
-
-  const handleUserLogout = useCallback(() => {
-    addToast(`You have been logged out.`);
-    setCurrentUser(null);
-    if(currentPage === Page.PROFILE) setPage(Page.HOME);
-  }, [addToast, setCurrentUser, currentPage, setPage]);
-
-  const handleSaveSermon = useCallback((sermonId: string) => {
-    if(!currentUser) {
+  const handleSaveSermon = useCallback(async (sermonId: string) => {
+    if(!supabaseUser) {
         addToast("Please log in to save sermons.");
         setPage(Page.PROFILE);
         return;
     }
-    setCurrentUser(prevUser => {
-        if(!prevUser) return null;
-        const isSaved = prevUser.savedSermonIds.includes(sermonId);
-        const newSavedIds = isSaved 
-            ? prevUser.savedSermonIds.filter(id => id !== sermonId)
-            : [...prevUser.savedSermonIds, sermonId];
-        addToast(isSaved ? 'Sermon removed from your list.' : 'Sermon saved!');
-        return { ...prevUser, savedSermonIds: newSavedIds };
-    });
-  }, [currentUser, setCurrentUser, addToast, setPage]);
 
-  const handleLogin = useCallback((role: UserRole) => { setUserRole(role); setPage(Page.ADMIN); }, [setPage]);
+    const isSaved = currentUserProfile?.savedSermonIds.includes(sermonId);
+    
+    if (isSaved) {
+        await supabase.from('saved_sermons').delete().match({ user_id: supabaseUser.id, sermon_id: sermonId });
+        setCurrentUserProfile(prev => prev ? ({...prev, savedSermonIds: prev.savedSermonIds.filter(id => id !== sermonId)}) : null);
+        addToast('Sermon removed from your list.');
+    } else {
+        await supabase.from('saved_sermons').insert({ user_id: supabaseUser.id, sermon_id: sermonId });
+        setCurrentUserProfile(prev => prev ? ({...prev, savedSermonIds: [...prev.savedSermonIds, sermonId]}) : null);
+        addToast('Sermon saved!');
+    }
+  }, [supabaseUser, currentUserProfile, addToast, setPage]);
+
+  const handleAdminLogin = useCallback((role: UserRole) => { 
+      setUserRole(role); 
+      setPage(Page.ADMIN); 
+  }, [setPage]);
+
   const openVideoModal = useCallback((url: string) => {
-      const videoId = url.includes('youtu.be') ? url.split('/').pop()?.split('?')[0] : new URL(url).searchParams.get('v');
-      setVideoModal({ open: true, url: `https://www.youtube.com/embed/${videoId}` });
+      let embedUrl = url;
+      if (url.includes('youtu.be')) {
+           const videoId = url.split('/').pop()?.split('?')[0];
+           embedUrl = `https://www.youtube.com/embed/${videoId}`;
+      } else if (url.includes('youtube.com')) {
+           const videoId = new URL(url).searchParams.get('v');
+           embedUrl = `https://www.youtube.com/embed/${videoId}`;
+      }
+      setVideoModal({ open: true, url: embedUrl });
   }, []);
 
   const renderPage = () => {
-    const savedSermons = sermons.filter(s => currentUser?.savedSermonIds.includes(s.id));
+    const savedSermonsList = sermons.filter(s => currentUserProfile?.savedSermonIds.includes(s.id));
+
+    if (loading) {
+        return <div className="flex items-center justify-center min-h-screen"><IconLoader className="w-10 h-10 text-primary-600" /></div>;
+    }
 
     switch (currentPage) {
         case Page.HOME: return <HomePage verse={verse} setPage={setPage} slideshowImages={slideshowImages} verseLoading={verseLoading} />;
-        case Page.SERMONS: return <SermonsPage sermons={sermons} openVideoModal={openVideoModal} handleShare={handleShare} currentUser={currentUser} handleSaveSermon={handleSaveSermon} />;
+        case Page.SERMONS: return <SermonsPage sermons={sermons} openVideoModal={openVideoModal} handleShare={handleShare} currentUser={currentUserProfile} handleSaveSermon={handleSaveSermon} />;
         case Page.EVENTS: return <EventsPage events={events} handleShare={handleShare} />;
         case Page.MEETINGS: return <Meetings meetings={meetings} handleShare={handleShare} />;
         case Page.PRAYER: return <PrayerPage prayers={prayers} handlePrayerSubmit={handlePrayerSubmit} setPrayers={setPrayers} addToast={addToast} />;
         case Page.MAP: return <MapPage branches={branches} />;
         case Page.GALLERY: return <GalleryPage albums={photoAlbums} />;
-        case Page.PROFILE: return <ProfilePage currentUser={currentUser} handleLogin={handleUserLogin} handleLogout={handleUserLogout} savedSermons={savedSermons} setPage={setPage} openVideoModal={openVideoModal} />;
-        case Page.ADMIN: return <AdminPage userRole={userRole} handleLogin={handleLogin} prayers={prayers} setPrayers={setPrayers} sermons={sermons} setSermons={setSermons} events={events} setEvents={setEvents} meetings={meetings} setMeetings={setMeetings} verse={verse} setVerse={setVerse} slideshowImages={slideshowImages} setSlideshowImages={setSlideshowImages} branches={branches} setBranches={setBranches} photoAlbums={photoAlbums} setPhotoAlbums={setPhotoAlbums} addToast={addToast} />;
+        case Page.PROFILE: return <ProfilePage supabaseUser={supabaseUser} currentUser={currentUserProfile} savedSermons={savedSermonsList} setPage={setPage} openVideoModal={openVideoModal} />;
+        case Page.ADMIN: return <AdminPage userRole={userRole} handleLogin={handleAdminLogin} prayers={prayers} setPrayers={setPrayers} sermons={sermons} setSermons={setSermons} events={events} setEvents={setEvents} meetings={meetings} setMeetings={setMeetings} verse={verse} setVerse={setVerse} slideshowImages={slideshowImages} setSlideshowImages={setSlideshowImages} branches={branches} setBranches={setBranches} photoAlbums={photoAlbums} setPhotoAlbums={setPhotoAlbums} addToast={addToast} supabaseUser={supabaseUser} fetchData={fetchData} />;
         case Page.SEARCH: return <SearchPage sermons={sermons} events={events} meetings={meetings} setPage={setPage} />;
         default: return <HomePage verse={verse} setPage={setPage} slideshowImages={slideshowImages} verseLoading={verseLoading} />;
     }
@@ -177,8 +252,9 @@ const App: React.FC = () => {
         activePage={currentPage} 
         setPage={setPage} 
         role={userRole} 
-        currentUser={currentUser}
-        onLogout={handleUserLogout} 
+        currentUser={currentUserProfile}
+        supabaseUser={supabaseUser}
+        onLogout={async () => { await supabase.auth.signOut(); setUserRole(null); addToast("Logged out"); }} 
         darkMode={darkMode} 
         setDarkMode={setDarkMode} 
         canGoBack={pageHistory.length > 1} 
@@ -195,7 +271,6 @@ const App: React.FC = () => {
           ))}
       </div>
       
-      {/* Back to Top Button */}
       {showBackToTop && (
         <button onClick={() => window.scrollTo({top: 0, behavior: 'smooth'})} className="fixed bottom-24 md:bottom-6 left-6 z-[150] w-12 h-12 bg-primary-600 text-white rounded-full shadow-lg flex items-center justify-center hover:bg-primary-700 transition">
             <IconArrowUp className="w-6 h-6" />
