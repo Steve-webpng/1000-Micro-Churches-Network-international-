@@ -5,7 +5,10 @@ export enum Page {
   MEETINGS = 'MEETINGS',
   PRAYER = 'PRAYER',
   ADMIN = 'ADMIN',
-  SEARCH = 'SEARCH'
+  SEARCH = 'SEARCH',
+  MAP = 'MAP',
+  GALLERY = 'GALLERY',
+  PROFILE = 'PROFILE',
 }
 
 export enum UserRole {
@@ -15,11 +18,16 @@ export enum UserRole {
   GUEST = 'GUEST'
 }
 
+export interface User {
+  name: string;
+  savedSermonIds: string[];
+}
+
 export interface Sermon {
   id: string;
   title: string;
   speaker: string;
-  series?: string; // New: Group sermons by series
+  series?: string;
   date: string;
   description: string;
   imageUrl: string;
@@ -29,7 +37,7 @@ export interface Sermon {
 export interface Event {
   id: string;
   title: string;
-  date: string; // Should be in a format parseable by new Date() e.g., "YYYY-MM-DDTHH:mm"
+  date: string;
   location: string;
   description: string;
 }
@@ -57,7 +65,7 @@ export interface PrayerRequest {
   status: 'PENDING' | 'APPROVED';
   aiResponse?: string;
   date: string;
-  prayerCount: number; // New: To count prayers
+  prayerCount: number;
 }
 
 export interface SearchResult {
@@ -65,18 +73,40 @@ export interface SearchResult {
   type: 'SERMON' | 'EVENT' | 'MEETING';
   title: string;
   description: string;
-  score: number; // For ranking
+  score: number;
 }
 
 export interface ChatMessage {
   id: string;
   user: string;
   text: string;
-  reactions: Record<string, string[]>; // emoji -> [userName, userName, ...]
+  reactions: Record<string, string[]>;
 }
 
 export interface SlideshowImage {
   id: string;
   url: string;
   caption?: string;
+}
+
+export interface ChurchBranch {
+  id: string;
+  name: string;
+  leader: string;
+  address: string;
+  lat: number;
+  lng: number;
+  radius: number;
+}
+
+export interface Photo {
+  id: string;
+  url: string;
+  caption?: string;
+}
+
+export interface PhotoAlbum {
+  id: string;
+  title: string;
+  photos: Photo[];
 }

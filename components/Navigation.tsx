@@ -1,11 +1,12 @@
 import React from 'react';
-import { Page, UserRole } from '../types';
-import { IconHome, IconSermon, IconEvent, IconMeeting, IconPrayer, IconAdmin, IconSearch, IconSun, IconMoon, IconArrowLeft } from './Icons';
+import { Page, User, UserRole } from '../types';
+import { IconHome, IconSermon, IconEvent, IconMeeting, IconPrayer, IconAdmin, IconSearch, IconSun, IconMoon, IconArrowLeft, IconMap, IconGallery, IconUser } from './Icons';
 
 interface NavigationProps {
   activePage: Page;
   setPage: (page: Page) => void;
-  role: UserRole | null;
+  role: UserRole | null; // For admin
+  currentUser: User | null; // For general user
   onLogout: () => void;
   darkMode: boolean;
   setDarkMode: (dark: boolean) => void;
@@ -13,7 +14,7 @@ interface NavigationProps {
   goBack: () => void;
 }
 
-const Navigation: React.FC<NavigationProps> = ({ activePage, setPage, role, onLogout, darkMode, setDarkMode, canGoBack, goBack }) => {
+const Navigation: React.FC<NavigationProps> = ({ activePage, setPage, role, currentUser, onLogout, darkMode, setDarkMode, canGoBack, goBack }) => {
 
   const navItems = [
     { page: Page.HOME, icon: <IconHome className="w-6 h-6" />, label: 'Home' },
@@ -21,6 +22,8 @@ const Navigation: React.FC<NavigationProps> = ({ activePage, setPage, role, onLo
     { page: Page.EVENTS, icon: <IconEvent className="w-6 h-6" />, label: 'Events' },
     { page: Page.MEETINGS, icon: <IconMeeting className="w-6 h-6" />, label: 'Meet' },
     { page: Page.PRAYER, icon: <IconPrayer className="w-6 h-6" />, label: 'Prayer' },
+    { page: Page.GALLERY, icon: <IconGallery className="w-6 h-6" />, label: 'Gallery' },
+    { page: Page.MAP, icon: <IconMap className="w-6 h-6" />, label: 'Map' },
   ];
   
   const pageTitles: Record<Page, string> = {
@@ -31,6 +34,9 @@ const Navigation: React.FC<NavigationProps> = ({ activePage, setPage, role, onLo
     [Page.PRAYER]: 'Prayer Wall',
     [Page.ADMIN]: 'Admin Dashboard',
     [Page.SEARCH]: 'Search',
+    [Page.MAP]: 'Branch Map',
+    [Page.GALLERY]: 'Photo Gallery',
+    [Page.PROFILE]: 'My Profile',
   };
 
   return (
@@ -65,16 +71,22 @@ const Navigation: React.FC<NavigationProps> = ({ activePage, setPage, role, onLo
              <IconSearch className="w-5 h-5" />
           </button>
           
-          {role ? (
-             <div className="flex items-center gap-2">
-                <button onClick={() => setPage(Page.ADMIN)} className="text-sm font-semibold text-primary-700 dark:text-primary-500 hover:underline">
-                  Dashboard ({role})
-                </button>
-                <button onClick={onLogout} className="text-xs text-red-500">Logout</button>
-             </div>
+          <div className="w-px h-6 bg-slate-200 dark:bg-slate-700"></div>
+
+          {currentUser ? (
+             <button onClick={() => setPage(Page.PROFILE)} className="flex items-center gap-2 text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-primary-600 dark:hover:text-primary-500">
+                <IconUser className="w-5 h-5" />
+                <span>{currentUser.name}</span>
+             </button>
           ) : (
-            <button onClick={() => setPage(Page.ADMIN)} className="text-sm text-slate-500 hover:text-primary-600 dark:text-slate-300 dark:hover:text-primary-500">
-              Admin Login
+            <button onClick={() => setPage(Page.PROFILE)} className="text-sm text-slate-500 hover:text-primary-600 dark:text-slate-300 dark:hover:text-primary-500">
+              Login
+            </button>
+          )}
+
+          {role && (
+            <button onClick={() => setPage(Page.ADMIN)} className="text-sm font-semibold text-primary-700 dark:text-primary-500 hover:underline">
+              Dashboard
             </button>
           )}
         </div>
@@ -83,11 +95,11 @@ const Navigation: React.FC<NavigationProps> = ({ activePage, setPage, role, onLo
       {/* Mobile Bottom Nav */}
       <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 shadow-lg z-50 pb-safe">
         <div className="flex justify-around items-center py-3">
-          {navItems.map((item) => (
+          {navItems.slice(0, 4).map((item) => (
             <button
               key={item.label}
               onClick={() => setPage(item.page)}
-              className={`flex flex-col items-center space-y-1 ${
+              className={`flex flex-col items-center space-y-1 w-16 ${
                 activePage === item.page ? 'text-primary-600 dark:text-primary-500' : 'text-slate-400 dark:text-slate-400'
               }`}
             >
@@ -96,11 +108,13 @@ const Navigation: React.FC<NavigationProps> = ({ activePage, setPage, role, onLo
             </button>
           ))}
            <button
-             onClick={() => setDarkMode(!darkMode)}
-             className="flex flex-col items-center space-y-1 text-slate-400 dark:text-slate-400"
+             onClick={() => setPage(Page.PROFILE)}
+             className={`flex flex-col items-center space-y-1 w-16 ${
+                activePage === Page.PROFILE ? 'text-primary-600 dark:text-primary-500' : 'text-slate-400 dark:text-slate-400'
+              }`}
           >
-             {darkMode ? <IconSun className="w-6 h-6" /> : <IconMoon className="w-6 h-6" />}
-            <span className="text-[10px] font-medium">Theme</span>
+             <IconUser className="w-6 h-6" />
+            <span className="text-[10px] font-medium">{currentUser ? 'Profile' : 'Login'}</span>
           </button>
         </div>
       </div>
