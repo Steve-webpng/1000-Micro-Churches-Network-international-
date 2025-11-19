@@ -1,0 +1,9 @@
+{
+  "name": "Copy of 1000 Micro Churches Network international Uganda",
+  "description": "A comprehensive platform for micro churches featuring sermons, events, video conferencing, and AI-powered prayer support.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone",
+    "display-capture"
+  ]
+}
