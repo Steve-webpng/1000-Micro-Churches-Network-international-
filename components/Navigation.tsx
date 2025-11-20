@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { Page, UserRole, User } from '../types';
-import { IconHome, IconSermon, IconEvent, IconMeeting, IconPrayer, IconSearch, IconSun, IconMoon, IconArrowLeft, IconMap, IconGallery, IconUser } from './Icons';
+import { IconHome, IconSermon, IconEvent, IconMeeting, IconPrayer, IconSearch, IconSun, IconMoon, IconArrowLeft, IconMap, IconGallery, IconUser, IconAdmin, IconFile } from './Icons';
 
 interface NavigationProps {
   activePage: Page;
@@ -24,8 +24,10 @@ const Navigation: React.FC<NavigationProps> = ({ activePage, setPage, role, curr
     { page: Page.EVENTS, icon: <IconEvent className="w-6 h-6" />, label: 'Events' },
     { page: Page.MEETINGS, icon: <IconMeeting className="w-6 h-6" />, label: 'Meet' },
     { page: Page.PRAYER, icon: <IconPrayer className="w-6 h-6" />, label: 'Prayer' },
+    { page: Page.RESOURCES, icon: <IconFile className="w-6 h-6" />, label: 'Resources' },
     { page: Page.GALLERY, icon: <IconGallery className="w-6 h-6" />, label: 'Gallery' },
     { page: Page.MAP, icon: <IconMap className="w-6 h-6" />, label: 'Map' },
+    { page: Page.ADMIN, icon: <IconAdmin className="w-6 h-6" />, label: 'Admin' },
   ];
   
   const pageTitles: Record<Page, string> = {
@@ -39,6 +41,7 @@ const Navigation: React.FC<NavigationProps> = ({ activePage, setPage, role, curr
     [Page.MAP]: 'Branch Map',
     [Page.GALLERY]: 'Photo Gallery',
     [Page.PROFILE]: 'My Profile',
+    [Page.RESOURCES]: 'Resources Library',
   };
 
   return (
@@ -51,7 +54,7 @@ const Navigation: React.FC<NavigationProps> = ({ activePage, setPage, role, curr
         </div>
 
         <nav className="flex items-center space-x-6">
-          {navItems.map((item) => (
+          {navItems.slice(0, 8).map((item) => (
             <button
               key={item.label}
               onClick={() => setPage(item.page)}
@@ -72,6 +75,9 @@ const Navigation: React.FC<NavigationProps> = ({ activePage, setPage, role, curr
           <button onClick={() => setPage(Page.SEARCH)} className="text-slate-500 hover:text-primary-600 dark:text-slate-400 dark:hover:text-primary-500">
              <IconSearch className="w-5 h-5" />
           </button>
+          <button onClick={() => setPage(Page.ADMIN)} className={`text-slate-500 hover:text-primary-600 dark:text-slate-400 dark:hover:text-primary-500 ${activePage === Page.ADMIN ? 'text-primary-600' : ''}`} title="Admin Dashboard">
+             <IconAdmin className="w-5 h-5" />
+          </button>
           
           <div className="w-px h-6 bg-slate-200 dark:bg-slate-700"></div>
 
@@ -90,12 +96,12 @@ const Navigation: React.FC<NavigationProps> = ({ activePage, setPage, role, curr
 
       {/* Mobile Bottom Nav */}
       <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 shadow-lg z-50 pb-safe">
-        <div className="flex justify-around items-center py-3">
-          {navItems.slice(0, 5).map((item) => (
+        <div className="flex justify-around items-center py-3 overflow-x-auto">
+          {navItems.slice(0, 6).map((item) => (
             <button
               key={item.label}
               onClick={() => setPage(item.page)}
-              className={`flex flex-col items-center space-y-1 w-16 ${
+              className={`flex flex-col items-center space-y-1 min-w-[64px] ${
                 activePage === item.page ? 'text-primary-600 dark:text-primary-500' : 'text-slate-400 dark:text-slate-400'
               }`}
             >
@@ -103,15 +109,6 @@ const Navigation: React.FC<NavigationProps> = ({ activePage, setPage, role, curr
               <span className="text-[10px] font-medium">{item.label}</span>
             </button>
           ))}
-           <button
-             onClick={() => setPage(Page.PROFILE)}
-             className={`flex flex-col items-center space-y-1 w-16 ${
-                activePage === Page.PROFILE ? 'text-primary-600 dark:text-primary-500' : 'text-slate-400 dark:text-slate-400'
-              }`}
-          >
-             <IconUser className="w-6 h-6" />
-            <span className="text-[10px] font-medium">{supabaseUser ? 'Profile' : 'Login'}</span>
-          </button>
         </div>
       </div>
       

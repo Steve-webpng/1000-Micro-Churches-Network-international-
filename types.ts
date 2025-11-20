@@ -12,6 +12,7 @@ export enum Page {
   MAP = 'MAP',
   GALLERY = 'GALLERY',
   PROFILE = 'PROFILE',
+  RESOURCES = 'RESOURCES',
 }
 
 export enum UserRole {
@@ -41,6 +42,7 @@ export interface Sermon {
   description: string;
   imageUrl: string;
   videoUrl?: string;
+  audioUrl?: string;
   created_at?: string;
 }
 
@@ -125,5 +127,22 @@ export interface PhotoAlbum {
   id: string; // UUID
   title: string;
   photos: Photo[];
+  created_at?: string;
+}
+
+export interface Announcement {
+  id: string; // UUID
+  message: string;
+  type: 'INFO' | 'ALERT' | 'SUCCESS';
+  isActive: boolean;
+  created_at?: string;
+}
+
+export interface Resource {
+  id: string; // UUID
+  title: string;
+  description: string;
+  category: string;
+  fileUrl: string;
   created_at?: string;
 }

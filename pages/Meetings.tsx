@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { Meeting, LiveParticipant, ChatMessage } from '../types';
 import { IconVideo, IconVideoOff, IconMic, IconMicOff, IconScreenShare, IconStopScreenShare, IconMoreVertical, IconUserX, IconSmile } from '../components/Icons';
@@ -234,7 +235,14 @@ const Meetings: React.FC<MeetingsPageProps> = ({ meetings, handleShare }) => {
         <div className="h-14 border-b border-slate-700 flex items-center justify-between px-4 bg-slate-800 shrink-0">
             <div className="font-semibold truncate pr-2 flex items-center">
                 {activeMeeting.title} 
-                <span className="text-xs font-normal text-slate-400 px-2 py-0.5 bg-slate-700 rounded ml-2 whitespace-nowrap">{participants.length} active</span>
+                <div className="ml-3 flex items-center gap-1.5 bg-slate-700/50 border border-slate-600/50 px-2.5 py-1 rounded-full">
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                    </span>
+                    <span className="text-xs font-medium text-slate-200">{participants.length}</span>
+                    <span className="text-[10px] text-slate-400 uppercase tracking-wide font-semibold hidden sm:inline">Participant{participants.length !== 1 && 's'}</span>
+                </div>
             </div>
             <button className="md:hidden text-sm px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded transition" onClick={() => setChatOpen(!chatOpen)}>Chat</button>
         </div>

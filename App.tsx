@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useCallback, memo } from 'react';
 import Navigation from './components/Navigation';
-import { Page, UserRole, Sermon, Event, PrayerRequest, Meeting, SlideshowImage, ChurchBranch, User, PhotoAlbum } from './types';
+import { Page, UserRole, Sermon, Event, PrayerRequest, Meeting, SlideshowImage, ChurchBranch, User, PhotoAlbum, Announcement, Resource } from './types';
 import { getVerseOfDay, generatePrayerResponse } from './services/geminiService';
 import { supabase } from './services/supabaseClient';
 import Meetings from './pages/Meetings';
@@ -14,7 +14,8 @@ import SearchPage from './pages/SearchPage';
 import MapPage from './pages/MapPage';
 import ProfilePage from './pages/ProfilePage';
 import GalleryPage from './pages/GalleryPage';
-import { IconX, IconArrowUp, IconLoader } from './components/Icons';
+import ResourcesPage from './pages/ResourcesPage';
+import { IconX, IconArrowUp, IconLoader, IconBell } from './components/Icons';
 
 const App: React.FC = () => {
   const [pageHistory, setPageHistory] = useState<Page[]>([Page.HOME]);
@@ -35,6 +36,8 @@ const App: React.FC = () => {
   const [slideshowImages, setSlideshowImages] = useState<SlideshowImage[]>([]);
   const [branches, setBranches] = useState<ChurchBranch[]>([]);
   const [photoAlbums, setPhotoAlbums] = useState<PhotoAlbum[]>([]);
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const [resources, setResources] = useState<Resource[]>([]);
 
   // User Data
   const [currentUserProfile, setCurrentUserProfile] = useState<User | null>(null);
@@ -68,9 +71,13 @@ const App: React.FC = () => {
 
         const { data: b } = await supabase.from('church_branches').select('*');
         if (b) setBranches(b);
+
+        const { data: a } = await supabase.from('announcements').select('*').eq('isActive', true).order('created_at', { ascending: false });
+        if (a) setAnnouncements(a);
+
+        const { data: r } = await supabase.from('resources').select('*').order('created_at', { ascending: false });
+        if (r) setResources(r);
         
-        // Fetch Albums and Photos (Complex join simulated for now or simplified structure)
-        // Assuming 'photo_albums' table exists and 'photos' table has 'album_id'
         const { data: pa } = await supabase.from('photo_albums').select('*');
         if (pa) {
             const albumsWithPhotos = await Promise.all(pa.map(async (album: any) => {
@@ -87,21 +94,42 @@ const App: React.FC = () => {
     }
   }, []);
 
+  const fetchUserRole = async (userId: string) => {
+      try {
+          const { data, error } = await supabase.from('profiles').select('role').eq('id', userId).single();
+          if (data && data.role === 'ADMIN') {
+              setUserRole(UserRole.ADMIN);
+          } else {
+              setUserRole(UserRole.GUEST);
+          }
+      } catch (err) {
+          setUserRole(UserRole.GUEST);
+      }
+  };
+
   useEffect(() => {
     fetchData();
     
     // Auth Listener
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSupabaseUser(session?.user ?? null);
-      if (session?.user) fetchUserProfile(session.user.id, session.user.email || '');
+      if (session?.user) {
+          fetchUserProfile(session.user.id, session.user.email || '');
+          fetchUserRole(session.user.id);
+      }
     });
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
       setSupabaseUser(session?.user ?? null);
-      if (session?.user) fetchUserProfile(session.user.id, session.user.email || '');
-      else setCurrentUserProfile(null);
+      if (session?.user) {
+          fetchUserProfile(session.user.id, session.user.email || '');
+          fetchUserRole(session.user.id);
+      } else {
+          setCurrentUserProfile(null);
+          setUserRole(null);
+      }
     });
 
     return () => subscription.unsubscribe();
@@ -240,7 +268,8 @@ const App: React.FC = () => {
         case Page.MAP: return <MapPage branches={branches} />;
         case Page.GALLERY: return <GalleryPage albums={photoAlbums} />;
         case Page.PROFILE: return <ProfilePage supabaseUser={supabaseUser} currentUser={currentUserProfile} savedSermons={savedSermonsList} setPage={setPage} openVideoModal={openVideoModal} />;
-        case Page.ADMIN: return <AdminPage userRole={userRole} handleLogin={handleAdminLogin} prayers={prayers} setPrayers={setPrayers} sermons={sermons} setSermons={setSermons} events={events} setEvents={setEvents} meetings={meetings} setMeetings={setMeetings} verse={verse} setVerse={setVerse} slideshowImages={slideshowImages} setSlideshowImages={setSlideshowImages} branches={branches} setBranches={setBranches} photoAlbums={photoAlbums} setPhotoAlbums={setPhotoAlbums} addToast={addToast} supabaseUser={supabaseUser} fetchData={fetchData} />;
+        case Page.RESOURCES: return <ResourcesPage resources={resources} />;
+        case Page.ADMIN: return <AdminPage userRole={userRole} handleLogin={handleAdminLogin} prayers={prayers} setPrayers={setPrayers} sermons={sermons} setSermons={setSermons} events={events} setEvents={setEvents} meetings={meetings} setMeetings={setMeetings} verse={verse} setVerse={setVerse} slideshowImages={slideshowImages} setSlideshowImages={setSlideshowImages} branches={branches} setBranches={setBranches} photoAlbums={photoAlbums} setPhotoAlbums={setPhotoAlbums} announcements={announcements} setAnnouncements={setAnnouncements} resources={resources} setResources={setResources} addToast={addToast} supabaseUser={supabaseUser} fetchData={fetchData} />;
         case Page.SEARCH: return <SearchPage sermons={sermons} events={events} meetings={meetings} setPage={setPage} />;
         default: return <HomePage verse={verse} setPage={setPage} slideshowImages={slideshowImages} verseLoading={verseLoading} />;
     }
@@ -248,6 +277,16 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-primary-50 dark:bg-slate-900 font-sans text-slate-800 dark:text-slate-200">
+      {/* Global Announcement Banner */}
+      {announcements.length > 0 && (
+          <div className="bg-slate-900 dark:bg-black text-white p-3 text-center text-sm font-medium relative z-[60]">
+             <div className="flex items-center justify-center gap-2 animate-pulse-slow">
+                <IconBell className="w-4 h-4 text-yellow-400" />
+                <span>{announcements[0].message}</span>
+             </div>
+          </div>
+      )}
+
       <Navigation 
         activePage={currentPage} 
         setPage={setPage} 

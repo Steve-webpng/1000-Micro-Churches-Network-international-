@@ -1,6 +1,7 @@
+
 import React, { useState, memo } from 'react';
 import { Sermon, User } from '../types';
-import { IconBookmark, IconShare } from '../components/Icons';
+import { IconBookmark, IconShare, IconHeadphones } from '../components/Icons';
 
 interface SermonsPageProps {
   sermons: Sermon[];
@@ -48,6 +49,11 @@ const SermonsPage: React.FC<SermonsPageProps> = ({ sermons, openVideoModal, hand
                                     <IconBookmark className="w-5 h-5" isFilled={currentUser?.savedSermonIds.includes(sermon.id)} />
                                 </button>
                             </div>
+                            {sermon.audioUrl && (
+                                <div className="absolute bottom-3 left-3 bg-black/60 backdrop-blur-sm px-3 py-1 rounded-full text-white text-xs font-medium flex items-center gap-2">
+                                    <IconHeadphones className="w-3 h-3" /> Audio Available
+                                </div>
+                            )}
                         </div>
                         <div className="p-6 flex-1 flex flex-col">
                             {sermon.series && <p className="text-xs font-bold uppercase text-primary-600 dark:text-primary-500 mb-1 tracking-wider">{sermon.series}</p>}
@@ -58,10 +64,18 @@ const SermonsPage: React.FC<SermonsPageProps> = ({ sermons, openVideoModal, hand
                                 <span>{new Date(sermon.date).toLocaleDateString()}</span>
                             </div>
                             <p className="text-slate-600 dark:text-slate-300 text-sm flex-1">{sermon.description}</p>
+                            
+                            {sermon.audioUrl && (
+                                <div className="mt-4 p-3 bg-slate-50 dark:bg-slate-700/50 rounded-lg">
+                                    <p className="text-xs font-bold text-slate-500 dark:text-slate-400 mb-2 uppercase flex items-center gap-2"><IconHeadphones className="w-3 h-3"/> Listen Now</p>
+                                    <audio controls src={sermon.audioUrl} className="w-full h-8" />
+                                </div>
+                            )}
+
                             <div className="mt-6 flex gap-2">
                                {sermon.videoUrl && (
-                                    <button onClick={() => openVideoModal(sermon.videoUrl)} className="flex-1 bg-primary-600 text-white px-4 py-2 rounded-lg text-sm font-bold shadow hover:bg-primary-700">
-                                    Watch Now
+                                    <button onClick={() => openVideoModal(sermon.videoUrl!)} className="flex-1 bg-primary-600 text-white px-4 py-2 rounded-lg text-sm font-bold shadow hover:bg-primary-700">
+                                    Watch Video
                                     </button>
                                 )}
                                 <button onClick={() => handleShare('Check out this sermon', sermon.title, `https://1000micro.church/sermon/${sermon.id}`)} className="border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-700">
