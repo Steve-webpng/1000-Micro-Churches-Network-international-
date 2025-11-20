@@ -16,6 +16,7 @@ export enum Page {
   RESOURCES = 'RESOURCES',
   TITHE = 'TITHE',
   GROUPS = 'GROUPS',
+  COMMUNITY = 'COMMUNITY',
 }
 
 export enum UserRole {
@@ -196,4 +197,13 @@ export interface SmallGroup {
   location: string;
   imageUrl: string;
   created_at?: string;
+}
+
+export interface Post {
+  id: string; // UUID
+  user_id: string;
+  content: string;
+  image_url?: string;
+  created_at: string;
+  profiles: { name: string }; // Author info from join
 }

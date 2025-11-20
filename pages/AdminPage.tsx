@@ -1,10 +1,11 @@
 
 
 import React, { useState, memo, useEffect } from 'react';
-import { Page, UserRole, PrayerRequest, Sermon, Event, Meeting, SlideshowImage, PhotoAlbum, Announcement, Resource, ConnectSubmission, SmallGroup } from '../types';
+import { Page, UserRole, PrayerRequest, Sermon, Event, Meeting, SlideshowImage, PhotoAlbum, Announcement, Resource, ConnectSubmission, SmallGroup, Post } from '../types';
 import { seedSermons, seedEvents } from '../services/geminiService';
-import { IconTrash, IconPlus, IconLoader, IconMegaphone, IconVideo, IconMapPin, IconFile, IconMail, IconBell, IconUsers } from '../components/Icons';
+import { IconTrash, IconPlus, IconLoader, IconMegaphone, IconVideo, IconMapPin, IconFile, IconMail, IconBell, IconUsers, IconMessageSquare } from '../components/Icons';
 import { supabase } from '../services/supabaseClient';
+import ImageUploader from '../components/ImageUploader';
 
 interface AdminPageProps {
   userRole: UserRole | null;
@@ -32,6 +33,8 @@ interface AdminPageProps {
   setResources: React.Dispatch<React.SetStateAction<Resource[]>>;
   smallGroups: SmallGroup[];
   setSmallGroups: React.Dispatch<React.SetStateAction<SmallGroup[]>>;
+  posts: Post[];
+  setPosts: React.Dispatch<React.SetStateAction<Post[]>>;
 }
 
 const AdminPage: React.FC<AdminPageProps> = (props) => {
@@ -90,6 +93,7 @@ const AdminPage: React.FC<AdminPageProps> = (props) => {
         case 'Resources': return <ResourceManagement {...props} />;
         case 'Notifications': return <NotificationManagement {...props} />;
         case 'Groups': return <GroupManagement {...props} />;
+        case 'Posts': return <PostManagement {...props} />;
         default: return null;
     }
   };
@@ -136,7 +140,7 @@ const AdminPage: React.FC<AdminPageProps> = (props) => {
     );
   }
 
-  const tabs = ['Dashboard', 'Announcements', 'Connect Cards', 'Prayers', 'Sermons', 'Events', 'Meetings', 'Slideshow', 'Gallery', 'Resources', 'Notifications', 'Groups'];
+  const tabs = ['Dashboard', 'Announcements', 'Connect Cards', 'Prayers', 'Sermons', 'Events', 'Meetings', 'Slideshow', 'Gallery', 'Resources', 'Notifications', 'Groups', 'Posts'];
 
   return (
     <div className="container mx-auto p-6 animate-fade-in">
@@ -272,43 +276,6 @@ const ConnectManagement: React.FC<AdminPageProps> = ({ addToast }) => {
                     ))}
                 </div>
             )}
-        </div>
-    );
-};
-
-// ... Reused Components ...
-const ImageUploader: React.FC<{onImageSelect: (url: string) => void, label?: string, accept?: string}> = ({ onImageSelect, label = "Upload Image", accept = "image/*" }) => {
-    const [uploading, setUploading] = useState(false);
-    const [preview, setPreview] = useState<string | null>(null);
-    const fileInputRef = React.useRef<HTMLInputElement>(null);
-
-    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-        setUploading(true);
-        try {
-            const fileExt = file.name.split('.').pop();
-            const fileName = `${Date.now()}.${fileExt}`;
-            const { error: uploadError } = await supabase.storage.from('images').upload(fileName, file);
-            if (uploadError) throw uploadError;
-            const { data } = supabase.storage.from('images').getPublicUrl(fileName);
-            setPreview(data.publicUrl);
-            onImageSelect(data.publicUrl);
-        } catch (error) {
-            console.error(error);
-            alert('Error uploading file.');
-        } finally {
-            setUploading(false);
-        }
-    };
-    
-    return (
-        <div>
-            <input type="file" accept={accept} onChange={handleFileChange} className="hidden" ref={fileInputRef} />
-            <button type="button" onClick={() => fileInputRef.current?.click()} disabled={uploading} className="w-full text-sm border-2 border-dashed border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-700/50 rounded-lg p-4 hover:border-primary-500 hover:text-primary-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
-                {uploading ? <IconLoader className="w-5 h-5 animate-spin" /> : <><IconPlus className="w-5 h-5"/> {label}</>}
-            </button>
-            {preview && accept.startsWith('image') && <img src={preview} alt="Preview" className="mt-3 rounded-lg max-h-40 object-cover w-full border border-slate-200 dark:border-slate-700" />}
         </div>
     );
 };
@@ -542,5 +509,52 @@ const GroupManagement: React.FC<AdminPageProps> = ({ smallGroups, addToast, fetc
     </div>
   );
 };
+
+const PostManagement: React.FC<AdminPageProps> = ({ posts, addToast, fetchData }) => {
+    const handleDelete = async (post: Post) => {
+        if (window.confirm("Are you sure you want to delete this post? This is permanent.")) {
+            const { error: dbError } = await supabase.from('posts').delete().eq('id', post.id);
+            if (post.image_url) {
+                const fileName = post.image_url.split('/').pop();
+                if (fileName) {
+                    await supabase.storage.from('images').remove([fileName]);
+                }
+            }
+            if (dbError) {
+                addToast(`Error deleting post: ${dbError.message}`);
+            } else {
+                addToast("Post deleted successfully.");
+                fetchData();
+            }
+        }
+    };
+
+    return (
+        <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700">
+            <h2 className="text-xl font-bold mb-4 text-slate-800 dark:text-slate-100 flex items-center gap-2"><IconMessageSquare className="w-5 h-5 text-primary-500"/> Manage Community Posts ({posts.length})</h2>
+            <div className="space-y-4 max-h-[600px] overflow-y-auto">
+                {posts.length === 0 ? <p className="text-center text-slate-500 py-8">No posts yet.</p> :
+                posts.map(post => (
+                    <div key={post.id} className="border border-slate-200 dark:border-slate-700 p-4 rounded-lg group relative">
+                        <div className="flex justify-between items-start">
+                            <div>
+                                <p className="text-sm text-slate-600 dark:text-slate-300">
+                                    <span className="font-bold text-slate-800 dark:text-slate-100">{post.profiles.name}</span> wrote:
+                                </p>
+                                <p className="mt-2 text-slate-700 dark:text-slate-200 whitespace-pre-wrap">{post.content}</p>
+                                {post.image_url && <img src={post.image_url} className="mt-2 max-h-40 rounded-lg border border-slate-200 dark:border-slate-700" alt="User upload"/>}
+                                <p className="text-xs text-slate-400 mt-2">{new Date(post.created_at).toLocaleString()}</p>
+                            </div>
+                            <button onClick={() => handleDelete(post)} className="text-red-500 hover:bg-red-100 dark:hover:bg-red-900/50 p-2 rounded-full opacity-50 group-hover:opacity-100">
+                                <IconTrash className="w-4 h-4" />
+                            </button>
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
+
 
 export default AdminPage;

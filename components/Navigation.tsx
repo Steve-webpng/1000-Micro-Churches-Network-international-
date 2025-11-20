@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { Page, UserRole, User, Notification } from '../types';
-import { IconHome, IconSermon, IconEvent, IconMeeting, IconPrayer, IconSearch, IconSun, IconMoon, IconArrowLeft, IconMap, IconGallery, IconUser, IconAdmin, IconFile, IconTithe, IconBell, IconUsers } from './Icons';
+import { IconHome, IconSermon, IconEvent, IconMeeting, IconPrayer, IconSearch, IconSun, IconMoon, IconArrowLeft, IconMap, IconGallery, IconUser, IconAdmin, IconFile, IconTithe, IconBell, IconUsers, IconMessageSquare } from './Icons';
 import NotificationsPanel from './NotificationsPanel';
 
 interface NavigationProps {
@@ -33,6 +33,7 @@ const Navigation: React.FC<NavigationProps> = ({
     { page: Page.HOME, icon: <IconHome className="w-6 h-6" />, label: 'Home' },
     { page: Page.SERMONS, icon: <IconSermon className="w-6 h-6" />, label: 'Sermons' },
     { page: Page.EVENTS, icon: <IconEvent className="w-6 h-6" />, label: 'Events' },
+    { page: Page.COMMUNITY, icon: <IconMessageSquare className="w-6 h-6" />, label: 'Community' },
     { page: Page.GROUPS, icon: <IconUsers className="w-6 h-6" />, label: 'Groups' },
     { page: Page.PRAYER, icon: <IconPrayer className="w-6 h-6" />, label: 'Prayer' },
     { page: Page.TITHE, icon: <IconTithe className="w-6 h-6" />, label: 'Give' },
@@ -57,6 +58,7 @@ const Navigation: React.FC<NavigationProps> = ({
     [Page.RESOURCES]: 'Resources Library',
     [Page.TITHE]: 'Tithe & Offering',
     [Page.GROUPS]: 'Find Your Community',
+    [Page.COMMUNITY]: 'Community Feed',
   };
 
   const handleNotificationsToggle = () => {
@@ -69,6 +71,10 @@ const Navigation: React.FC<NavigationProps> = ({
   const handleMarkAllRead = () => {
     onOpenNotifications();
   };
+
+  const mobileNavItems = navItems.filter(item => 
+    [Page.HOME, Page.SERMONS, Page.EVENTS, Page.COMMUNITY, Page.PRAYER, Page.TITHE].includes(item.page)
+  );
 
   return (
     <>
@@ -141,7 +147,7 @@ const Navigation: React.FC<NavigationProps> = ({
       {/* Mobile Bottom Nav */}
       <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 shadow-lg z-50 pb-safe">
         <div className="flex justify-around items-center py-3 overflow-x-auto">
-          {navItems.slice(0, 6).map((item) => (
+          {mobileNavItems.map((item) => (
             <button
               key={item.label}
               onClick={() => setPage(item.page)}

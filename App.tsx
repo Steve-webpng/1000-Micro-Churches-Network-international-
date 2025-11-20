@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, memo } from 'react';
 import Navigation from './components/Navigation';
-import { Page, UserRole, Sermon, Event, PrayerRequest, Meeting, SlideshowImage, ChurchBranch, User, PhotoAlbum, Announcement, Resource, Notification, SmallGroup } from './types';
+import { Page, UserRole, Sermon, Event, PrayerRequest, Meeting, SlideshowImage, ChurchBranch, User, PhotoAlbum, Announcement, Resource, Notification, SmallGroup, Post } from './types';
 import { getVerseOfDay, generatePrayerResponse } from './services/geminiService';
 import { supabase } from './services/supabaseClient';
 import Meetings from './pages/Meetings';
@@ -18,6 +18,7 @@ import GalleryPage from './pages/GalleryPage';
 import ResourcesPage from './pages/ResourcesPage';
 import TithePage from './pages/TithePage';
 import GroupsPage from './pages/GroupsPage';
+import CommunityPage from './pages/CommunityPage';
 import { IconX, IconArrowUp, IconLoader, IconBell } from './components/Icons';
 
 const App: React.FC = () => {
@@ -42,6 +43,7 @@ const App: React.FC = () => {
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [resources, setResources] = useState<Resource[]>([]);
   const [smallGroups, setSmallGroups] = useState<SmallGroup[]>([]);
+  const [posts, setPosts] = useState<Post[]>([]);
 
   // User Data
   const [currentUserProfile, setCurrentUserProfile] = useState<User | null>(null);
@@ -86,6 +88,9 @@ const App: React.FC = () => {
 
         const { data: g } = await supabase.from('small_groups').select('*').order('created_at', { ascending: false });
         if (g) setSmallGroups(g as SmallGroup[]);
+
+        const { data: po } = await supabase.from('posts').select('*, profiles(name)').order('created_at', { ascending: false });
+        if (po) setPosts(po as unknown as Post[]);
         
         const { data: pa } = await supabase.from('photo_albums').select('*');
         if (pa) {
@@ -285,7 +290,8 @@ const App: React.FC = () => {
         case Page.RESOURCES: return <ResourcesPage resources={resources} />;
         case Page.TITHE: return <TithePage />;
         case Page.GROUPS: return <GroupsPage smallGroups={smallGroups} addToast={addToast} supabaseUser={supabaseUser} setPage={setPage} />;
-        case Page.ADMIN: return <AdminPage userRole={userRole} handleLogin={handleAdminLogin} prayers={prayers} setPrayers={setPrayers} sermons={sermons} setSermons={setSermons} events={events} setEvents={setEvents} meetings={meetings} setMeetings={setMeetings} verse={verse} setVerse={setVerse} slideshowImages={slideshowImages} setSlideshowImages={setSlideshowImages} branches={branches} setBranches={setBranches} photoAlbums={photoAlbums} setPhotoAlbums={setPhotoAlbums} announcements={announcements} setAnnouncements={setAnnouncements} resources={resources} setResources={setResources} addToast={addToast} supabaseUser={supabaseUser} fetchData={fetchData} smallGroups={smallGroups} setSmallGroups={setSmallGroups} />;
+        case Page.COMMUNITY: return <CommunityPage posts={posts} fetchData={fetchData} supabaseUser={supabaseUser} currentUser={currentUserProfile} addToast={addToast} userRole={userRole} />;
+        case Page.ADMIN: return <AdminPage userRole={userRole} handleLogin={handleAdminLogin} prayers={prayers} setPrayers={setPrayers} sermons={sermons} setSermons={setSermons} events={events} setEvents={setEvents} meetings={meetings} setMeetings={setMeetings} verse={verse} setVerse={setVerse} slideshowImages={slideshowImages} setSlideshowImages={setSlideshowImages} branches={branches} setBranches={setBranches} photoAlbums={photoAlbums} setPhotoAlbums={setPhotoAlbums} announcements={announcements} setAnnouncements={setAnnouncements} resources={resources} setResources={setResources} addToast={addToast} supabaseUser={supabaseUser} fetchData={fetchData} smallGroups={smallGroups} setSmallGroups={setSmallGroups} posts={posts} setPosts={setPosts} />;
         case Page.SEARCH: return <SearchPage sermons={sermons} events={events} meetings={meetings} setPage={setPage} />;
         default: return <HomePage verse={verse} setPage={setPage} slideshowImages={slideshowImages} verseLoading={verseLoading} />;
     }
