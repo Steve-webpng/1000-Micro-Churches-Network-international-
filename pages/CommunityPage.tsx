@@ -1,5 +1,6 @@
 
 
+
 import React, { useState, memo } from 'react';
 import { Post, User, UserRole, Comment } from '../types';
 import { supabase } from '../services/supabaseClient';
@@ -52,9 +53,11 @@ const CommunityPage: React.FC<CommunityPageProps> = ({ posts, fetchData, supabas
         if (window.confirm("Are you sure you want to delete this post? This is permanent.")) {
             const { error: dbError } = await supabase.from('posts').delete().eq('id', post.id);
             if (post.image_url) {
-                const fileName = post.image_url.split('/').pop();
-                if (fileName) {
-                    await supabase.storage.from('images').remove([fileName]);
+                const bucketName = 'images';
+                const urlParts = post.image_url.split(`/${bucketName}/`);
+                if (urlParts.length > 1) {
+                    const filePath = urlParts[1];
+                    await supabase.storage.from(bucketName).remove([filePath]);
                 }
             }
             if (dbError) {
@@ -117,7 +120,7 @@ const CommunityPage: React.FC<CommunityPageProps> = ({ posts, fetchData, supabas
                             <div className="relative"><img src={imageUrl} alt="Upload preview" className="max-h-48 rounded-lg border border-slate-200 dark:border-slate-700"/><button type="button" onClick={() => setImageUrl(null)} className="absolute top-2 right-2 bg-black/50 text-white p-1 rounded-full hover:bg-black/80"><IconX className="w-4 h-4"/></button></div>
                         )}
                         <div className="flex justify-between items-center">
-                            <ImageUploader onImageSelect={setImageUrl} onUploadStart={() => setImageUploading(true)} onUploadEnd={() => setImageUploading(false)} label="Add Photo" />
+                            <ImageUploader supabaseUser={supabaseUser} onImageSelect={setImageUrl} onUploadStart={() => setImageUploading(true)} onUploadEnd={() => setImageUploading(false)} label="Add Photo" />
                             <button type="submit" disabled={loading || imageUploading} className="bg-primary-600 text-white px-6 py-2 rounded-lg font-bold shadow hover:bg-primary-700 disabled:opacity-50 flex items-center justify-center gap-2">
                                 {loading ? <IconLoader className="w-5 h-5"/> : 'Post'}
                             </button>

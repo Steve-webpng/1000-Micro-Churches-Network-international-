@@ -1,9 +1,11 @@
 
+
 import React, { useState, useRef } from 'react';
 import { supabase } from '../services/supabaseClient';
 import { IconLoader, IconPlus } from './Icons';
 
 interface ImageUploaderProps {
+    supabaseUser: any;
     onImageSelect: (url: string) => void;
     onUploadStart?: () => void;
     onUploadEnd?: () => void;
@@ -12,6 +14,7 @@ interface ImageUploaderProps {
 }
 
 const ImageUploader: React.FC<ImageUploaderProps> = ({ 
+    supabaseUser,
     onImageSelect, 
     onUploadStart,
     onUploadEnd,
@@ -28,19 +31,27 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({
         
         onUploadStart?.();
         setUploading(true);
+        
+        if (!supabaseUser?.id) {
+            alert('You must be logged in to upload files.');
+            setUploading(false);
+            onUploadEnd?.();
+            return;
+        }
+
         try {
             const fileExt = file.name.split('.').pop();
-            const fileName = `${Date.now()}.${fileExt}`;
-            const { error: uploadError } = await supabase.storage.from('images').upload(fileName, file);
+            const filePath = `${supabaseUser.id}/${Date.now()}.${fileExt}`;
+            const { error: uploadError } = await supabase.storage.from('images').upload(filePath, file);
             if (uploadError) throw uploadError;
             
-            const { data } = supabase.storage.from('images').getPublicUrl(fileName);
+            const { data } = supabase.storage.from('images').getPublicUrl(filePath);
             setPreview(data.publicUrl);
             onImageSelect(data.publicUrl);
 
-        } catch (error) {
+        } catch (error: any) {
             console.error(error);
-            alert('Error uploading file.');
+            alert(`Error uploading file: ${error.message}`);
         } finally {
             setUploading(false);
             onUploadEnd?.();

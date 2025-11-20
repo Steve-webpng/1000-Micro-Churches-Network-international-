@@ -1,5 +1,6 @@
 
 
+
 import React, { useState, memo, useEffect } from 'react';
 import { Page, UserRole, PrayerRequest, Sermon, Event, Meeting, SlideshowImage, PhotoAlbum, Announcement, Resource, ConnectSubmission, SmallGroup, Post } from '../types';
 import { seedSermons, seedEvents } from '../services/geminiService';
@@ -350,7 +351,7 @@ const PrayerManagement: React.FC<AdminPageProps> = ({ prayers, addToast, fetchDa
   );
 };
 
-const SermonManagement: React.FC<AdminPageProps> = ({ sermons, addToast, fetchData }) => {
+const SermonManagement: React.FC<AdminPageProps> = ({ sermons, addToast, fetchData, supabaseUser }) => {
   const [form, setForm] = useState({ title: '', speaker: '', series: '', date: '', description: '', imageUrl: '', videoUrl: '', audioUrl: '' });
   const handleChange = (e: any) => setForm({ ...form, [e.target.name]: e.target.value });
   const handleSubmit = async (e: React.FormEvent) => {
@@ -369,7 +370,7 @@ const SermonManagement: React.FC<AdminPageProps> = ({ sermons, addToast, fetchDa
         <input name="speaker" value={form.speaker} onChange={handleChange} placeholder="Speaker" required className="w-full bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded p-2 text-sm"/>
         <input name="date" type="date" value={form.date} onChange={handleChange} required className="w-full bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded p-2 text-sm"/>
         <textarea name="description" value={form.description} onChange={handleChange} placeholder="Desc" required className="w-full bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded p-2 text-sm"/>
-        <ImageUploader onImageSelect={(url) => setForm({...form, imageUrl: url})} />
+        <ImageUploader supabaseUser={supabaseUser} onImageSelect={(url) => setForm({...form, imageUrl: url})} />
         <input name="videoUrl" value={form.videoUrl} onChange={handleChange} placeholder="Video URL" className="w-full bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded p-2 text-sm"/>
         <input name="audioUrl" value={form.audioUrl} onChange={handleChange} placeholder="Audio URL" className="w-full bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded p-2 text-sm"/>
         <button type="submit" className="w-full bg-primary-600 text-white py-2 rounded font-bold">Add</button>
@@ -410,14 +411,14 @@ const MeetingManagement: React.FC<AdminPageProps> = ({ meetings, addToast, fetch
     );
 };
 
-const SlideshowManagement: React.FC<AdminPageProps> = ({ slideshowImages, addToast, fetchData }) => {
+const SlideshowManagement: React.FC<AdminPageProps> = ({ slideshowImages, addToast, fetchData, supabaseUser }) => {
     const [caption, setCaption] = useState('');
     const [url, setUrl] = useState('');
     const handleSubmit = async (e: React.FormEvent) => { e.preventDefault(); if(!url) return; await supabase.from('slideshow_images').insert([{url, caption}]); fetchData(); setUrl(''); setCaption(''); addToast("Slide added."); };
     const handleDelete = async (id: string) => { await supabase.from('slideshow_images').delete().eq('id', id); fetchData(); };
     return (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <form onSubmit={handleSubmit} className="md:col-span-1 bg-white dark:bg-slate-800 p-6 rounded space-y-4"><h3 className="font-bold text-slate-800 dark:text-slate-100">Add Slide</h3><ImageUploader onImageSelect={setUrl}/><input value={caption} onChange={e=>setCaption(e.target.value)} placeholder="Caption" className="w-full p-2 border rounded bg-slate-50 dark:bg-slate-700"/><button className="w-full bg-primary-600 text-white py-2 rounded">Add</button></form>
+            <form onSubmit={handleSubmit} className="md:col-span-1 bg-white dark:bg-slate-800 p-6 rounded space-y-4"><h3 className="font-bold text-slate-800 dark:text-slate-100">Add Slide</h3><ImageUploader supabaseUser={supabaseUser} onImageSelect={setUrl}/><input value={caption} onChange={e=>setCaption(e.target.value)} placeholder="Caption" className="w-full p-2 border rounded bg-slate-50 dark:bg-slate-700"/><button className="w-full bg-primary-600 text-white py-2 rounded">Add</button></form>
             <div className="md:col-span-2 grid grid-cols-2 gap-4 bg-white dark:bg-slate-800 p-6 rounded">{slideshowImages.map(img => <div key={img.id} className="relative group aspect-video"><img src={img.url} className="w-full h-full object-cover"/><button onClick={()=>handleDelete(img.id)} className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white"><IconTrash/></button></div>)}</div>
         </div>
     );
@@ -435,19 +436,19 @@ const GalleryManagement: React.FC<AdminPageProps> = ({ photoAlbums, addToast, fe
     );
 };
 
-const ResourceManagement: React.FC<AdminPageProps> = ({ resources, addToast, fetchData }) => {
+const ResourceManagement: React.FC<AdminPageProps> = ({ resources, addToast, fetchData, supabaseUser }) => {
     const [form, setForm] = useState({ title: '', description: '', category: '', fileUrl: '' });
     const handleSubmit = async (e:React.FormEvent) => { e.preventDefault(); if(!form.fileUrl) return; await supabase.from('resources').insert([form]); fetchData(); setForm({title:'',description:'',category:'',fileUrl:''}); addToast("Resource added."); };
     const handleDelete = async (id:string) => { await supabase.from('resources').delete().eq('id', id); fetchData(); };
     return (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <form onSubmit={handleSubmit} className="md:col-span-1 bg-white dark:bg-slate-800 p-6 rounded space-y-4"><h3 className="font-bold text-slate-800 dark:text-slate-100">Add Resource</h3><input value={form.title} onChange={e=>setForm({...form, title:e.target.value})} placeholder="Title" className="w-full p-2 bg-slate-50 dark:bg-slate-700 border rounded"/><ImageUploader onImageSelect={url=>setForm({...form, fileUrl:url})} label="Upload File"/><button className="w-full bg-primary-600 text-white py-2 rounded">Add</button></form>
+            <form onSubmit={handleSubmit} className="md:col-span-1 bg-white dark:bg-slate-800 p-6 rounded space-y-4"><h3 className="font-bold text-slate-800 dark:text-slate-100">Add Resource</h3><input value={form.title} onChange={e=>setForm({...form, title:e.target.value})} placeholder="Title" className="w-full p-2 bg-slate-50 dark:bg-slate-700 border rounded"/><ImageUploader supabaseUser={supabaseUser} onImageSelect={url=>setForm({...form, fileUrl:url})} label="Upload File"/><button className="w-full bg-primary-600 text-white py-2 rounded">Add</button></form>
             <div className="md:col-span-2 bg-white dark:bg-slate-800 p-6 rounded space-y-2">{resources.map(r => <div key={r.id} className="flex justify-between p-2 border-b text-slate-800 dark:text-slate-200"><span>{r.title}</span><button onClick={()=>handleDelete(r.id)} className="text-red-500"><IconTrash className="w-4 h-4"/></button></div>)}</div>
         </div>
     );
 };
 
-const GroupManagement: React.FC<AdminPageProps> = ({ smallGroups, addToast, fetchData }) => {
+const GroupManagement: React.FC<AdminPageProps> = ({ smallGroups, addToast, fetchData, supabaseUser }) => {
   const [form, setForm] = useState({ name: '', leader: '', topic: 'Bible Study', schedule: '', location: '', description: '', imageUrl: '' });
   const [loading, setLoading] = useState(false);
   const topics = ['Bible Study', 'Men', 'Women', 'Youth', 'Marriage', 'Community Outreach'];
@@ -488,7 +489,7 @@ const GroupManagement: React.FC<AdminPageProps> = ({ smallGroups, addToast, fetc
         <input name="schedule" value={form.schedule} onChange={handleChange} placeholder="Schedule (e.g., Tuesdays at 7pm)" required className="w-full bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded p-2 text-sm"/>
         <input name="location" value={form.location} onChange={handleChange} placeholder="Location (e.g., Online or Address)" required className="w-full bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded p-2 text-sm"/>
         <textarea name="description" value={form.description} onChange={handleChange} placeholder="Description" required className="w-full bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded p-2 text-sm" rows={3}/>
-        <ImageUploader onImageSelect={(url) => setForm({...form, imageUrl: url})} label="Upload Group Image" />
+        <ImageUploader supabaseUser={supabaseUser} onImageSelect={(url) => setForm({...form, imageUrl: url})} label="Upload Group Image" />
         <button type="submit" disabled={loading} className="w-full bg-primary-600 text-white py-2 rounded font-bold hover:bg-primary-700 disabled:opacity-50 flex items-center justify-center">
             {loading ? <IconLoader className="w-5 h-5"/> : 'Add Group'}
         </button>
@@ -515,9 +516,11 @@ const PostManagement: React.FC<AdminPageProps> = ({ posts, addToast, fetchData }
         if (window.confirm("Are you sure you want to delete this post? This is permanent.")) {
             const { error: dbError } = await supabase.from('posts').delete().eq('id', post.id);
             if (post.image_url) {
-                const fileName = post.image_url.split('/').pop();
-                if (fileName) {
-                    await supabase.storage.from('images').remove([fileName]);
+                const bucketName = 'images';
+                const urlParts = post.image_url.split(`/${bucketName}/`);
+                if (urlParts.length > 1) {
+                    const filePath = urlParts[1];
+                    await supabase.storage.from(bucketName).remove([filePath]);
                 }
             }
             if (dbError) {
