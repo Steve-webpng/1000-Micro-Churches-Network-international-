@@ -44,6 +44,8 @@ const AdminPage: React.FC<AdminPageProps> = (props) => {
   const [authError, setAuthError] = useState('');
   const [activeTab, setActiveTab] = useState('Dashboard');
   const [authLoading, setAuthLoading] = useState(false);
+  
+  const allowedRoles = [UserRole.ADMIN, UserRole.SUPER_ADMIN];
 
   const handleAdminAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -66,12 +68,12 @@ const AdminPage: React.FC<AdminPageProps> = (props) => {
              console.warn("Profile check failed, proceeding if auth valid (Check RLS policies)");
         }
 
-        if (profile && profile.role !== 'ADMIN') {
+        if (profile && !allowedRoles.includes(profile.role)) {
              await supabase.auth.signOut();
              throw new Error("Access Denied: You do not have Administrator privileges.");
         }
 
-        props.handleLogin(UserRole.ADMIN);
+        props.handleLogin(profile.role);
 
     } catch (error: any) {
         setAuthError(error.message);
@@ -122,7 +124,7 @@ const AdminPage: React.FC<AdminPageProps> = (props) => {
     );
   }
 
-  if (props.userRole !== UserRole.ADMIN) {
+  if (!props.userRole || !allowedRoles.includes(props.userRole)) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] animate-fade-in">
         <div className="bg-red-50 dark:bg-red-900/20 p-8 rounded-xl text-center max-w-md border border-red-200 dark:border-red-800">
@@ -131,7 +133,7 @@ const AdminPage: React.FC<AdminPageProps> = (props) => {
             </div>
             <h2 className="text-2xl font-bold text-red-600 dark:text-red-400 mb-2">Access Denied</h2>
             <p className="text-slate-600 dark:text-slate-300 mb-6">
-                Your account ({props.supabaseUser.email}) is logged in, but you do not have administrator privileges. Please contact the site owner to request access.
+                Your account ({props.supabaseUser.email}) is logged in, but you do not have sufficient privileges to access this page.
             </p>
             <button onClick={() => supabase.auth.signOut()} className="bg-slate-800 text-white px-6 py-2 rounded-lg font-bold hover:bg-slate-700 transition-colors">
                 Log Out
@@ -148,7 +150,7 @@ const AdminPage: React.FC<AdminPageProps> = (props) => {
         <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
             <div>
                 <h1 className="text-3xl font-bold text-slate-800 dark:text-slate-100">Admin Dashboard</h1>
-                <p className="text-slate-500 dark:text-slate-400 text-sm">Logged in as {props.supabaseUser.email}</p>
+                <p className="text-slate-500 dark:text-slate-400 text-sm">Logged in as {props.supabaseUser.email} ({props.userRole})</p>
             </div>
             <button onClick={() => supabase.auth.signOut()} className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors">Sign Out</button>
         </div>

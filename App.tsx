@@ -1,5 +1,6 @@
 
 
+
 import React, { useState, useEffect, useCallback, memo } from 'react';
 import Navigation from './components/Navigation';
 import { Page, UserRole, Sermon, Event, PrayerRequest, Meeting, SlideshowImage, ChurchBranch, User, PhotoAlbum, Announcement, Resource, Notification, SmallGroup, Post, Conversation } from './types';
@@ -125,12 +126,18 @@ const App: React.FC = () => {
   const fetchUserRole = async (userId: string) => {
       try {
           const { data, error } = await supabase.from('profiles').select('role').eq('id', userId).single();
-          if (data && data.role === 'ADMIN') {
-              setUserRole(UserRole.ADMIN);
+           if (error) {
+            console.warn("Could not fetch user role, defaulting to GUEST. Check RLS policies.", error);
+            setUserRole(UserRole.GUEST);
+            return;
+          }
+          if (data && data.role) {
+              setUserRole(data.role as UserRole);
           } else {
               setUserRole(UserRole.GUEST);
           }
       } catch (err) {
+          console.error("Error in fetchUserRole:", err);
           setUserRole(UserRole.GUEST);
       }
   };

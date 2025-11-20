@@ -22,6 +22,7 @@ export enum Page {
 }
 
 export enum UserRole {
+  SUPER_ADMIN = 'SUPER_ADMIN',
   ADMIN = 'ADMIN',
   CONTENT_MANAGER = 'CONTENT_MANAGER',
   MODERATOR = 'MODERATOR',

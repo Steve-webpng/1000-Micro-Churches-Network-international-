@@ -139,9 +139,11 @@ const Navigation: React.FC<NavigationProps> = ({
             </div>
           )}
 
-          <button onClick={() => setPage(Page.ADMIN)} className={`text-slate-500 hover:text-primary-600 dark:text-slate-400 dark:hover:text-primary-500 ${activePage === Page.ADMIN ? 'text-primary-600' : ''}`} title="Admin Dashboard">
-             <IconAdmin className="w-5 h-5" />
-          </button>
+          {role === UserRole.SUPER_ADMIN && (
+            <button onClick={() => setPage(Page.ADMIN)} className={`text-slate-500 hover:text-primary-600 dark:text-slate-400 dark:hover:text-primary-500 ${activePage === Page.ADMIN ? 'text-primary-600' : ''}`} title="Admin Dashboard">
+               <IconAdmin className="w-5 h-5" />
+            </button>
+          )}
           
           <div className="w-px h-6 bg-slate-200 dark:bg-slate-700"></div>
 
