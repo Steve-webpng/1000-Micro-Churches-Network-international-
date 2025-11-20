@@ -199,6 +199,22 @@ export interface SmallGroup {
   created_at?: string;
 }
 
+export interface Like {
+  id: string;
+  user_id: string;
+  post_id: string;
+  created_at: string;
+}
+
+export interface Comment {
+  id: string;
+  user_id: string;
+  post_id: string;
+  content: string;
+  created_at: string;
+  profiles: { name: string }; // Author info
+}
+
 export interface Post {
   id: string; // UUID
   user_id: string;
@@ -206,4 +222,6 @@ export interface Post {
   image_url?: string;
   created_at: string;
   profiles: { name: string }; // Author info from join
+  likes: Like[];
+  comments: Comment[];
 }

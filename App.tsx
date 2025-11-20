@@ -89,8 +89,8 @@ const App: React.FC = () => {
         const { data: g } = await supabase.from('small_groups').select('*').order('created_at', { ascending: false });
         if (g) setSmallGroups(g as SmallGroup[]);
 
-        const { data: po } = await supabase.from('posts').select('*, profiles(name)').order('created_at', { ascending: false });
-        if (po) setPosts(po as unknown as Post[]);
+        const { data: po } = await supabase.from('posts').select('*, profiles(name), likes(*), comments(*, profiles(name))').order('created_at', { ascending: false });
+        if (po) setPosts(po as Post[]);
         
         const { data: pa } = await supabase.from('photo_albums').select('*');
         if (pa) {
