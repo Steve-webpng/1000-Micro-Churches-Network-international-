@@ -22,7 +22,7 @@ const Meetings: React.FC<MeetingsPageProps> = ({ meetings, handleShare }) => {
   const [screenStream, setScreenStream] = useState<MediaStream | null>(null);
   const [cameraOn, setCameraOn] = useState(true);
   const [micOn, setMicOn] = useState(true);
-  const [chatOpen, setChatOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(true);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputMsg, setInputMsg] = useState('');
   const [activeReactionPicker, setActiveReactionPicker] = useState<string | null>(null);
@@ -57,12 +57,41 @@ const Meetings: React.FC<MeetingsPageProps> = ({ meetings, handleShare }) => {
     setJoiningMeeting(null);
     await startCamera();
 
+    // Simulate a welcome message from host
+    setTimeout(() => {
+      const welcomeMsg: ChatMessage = {
+        id: `msg-welcome-${Date.now()}`,
+        user: joiningMeeting.host,
+        text: `Welcome, ${userName}! Glad you could join us.`,
+        reactions: {},
+      };
+      setMessages(prev => [...prev, welcomeMsg]);
+    }, 1500);
+
+
     // Simulate other users joining and entering waiting room
     if(isHost) {
       setTimeout(() => setWaitingRoom(prev => [...prev, {id: 'wait-1', name: 'Sarah'}]), 3000);
       setTimeout(() => setWaitingRoom(prev => [...prev, {id: 'wait-2', name: 'Mike'}]), 5000);
     } else {
-       setTimeout(() => setParticipants(prev => [...prev, {id: 'host-1', name: joiningMeeting.host, isHost: true, muted: false}]), 2000);
+       setTimeout(() => {
+         const hostUser = {id: 'host-1', name: joiningMeeting.host, isHost: true, muted: false};
+         setParticipants(prev => [...prev, hostUser]);
+         
+         // Simulate another participant
+         setTimeout(() => {
+           const otherUser = {id: `user-${Date.now()}`, name: 'Jane Doe', isHost: false, muted: false};
+           setParticipants(prev => [...prev, otherUser]);
+           const joinMsg: ChatMessage = {
+             id: `msg-join-${Date.now()}`,
+             user: otherUser.name,
+             text: "Hey everyone! Looking forward to this.",
+             reactions: {},
+           };
+           setMessages(prev => [...prev, joinMsg]);
+         }, 3000);
+
+       }, 2000);
     }
   };
 
@@ -109,14 +138,39 @@ const Meetings: React.FC<MeetingsPageProps> = ({ meetings, handleShare }) => {
   const sendMessage = (e: React.FormEvent) => {
     e.preventDefault();
     if (!inputMsg.trim() || !localUser) return;
+    
+    const userMessageText = inputMsg;
     const newMessage: ChatMessage = {
         id: `msg-${Date.now()}`,
         user: localUser.name,
-        text: inputMsg,
+        text: userMessageText,
         reactions: {},
     };
-    setMessages([...messages, newMessage]);
+    setMessages(prev => [...prev, newMessage]);
     setInputMsg('');
+
+    // Simulate a reply from another participant to make it feel "live"
+    const otherParticipants = participants.filter(p => p.id !== localUser.id);
+    if (otherParticipants.length > 0) {
+        setTimeout(() => {
+            const replier = otherParticipants[Math.floor(Math.random() * otherParticipants.length)];
+            const replies = [
+                `That's a great point, ${localUser.name}.`,
+                "I agree!",
+                "Could you elaborate on that?",
+                "Interesting perspective.",
+                "Thanks for sharing that."
+            ];
+            const replyText = replies[Math.floor(Math.random() * replies.length)];
+            const replyMessage: ChatMessage = {
+                id: `msg-reply-${Date.now()}`,
+                user: replier.name,
+                text: replyText,
+                reactions: {},
+            };
+            setMessages(prev => [...prev, replyMessage]);
+        }, 1500 + Math.random() * 2000);
+    }
   };
 
   const handleReaction = (messageId: string, emoji: string) => {
@@ -154,7 +208,7 @@ const Meetings: React.FC<MeetingsPageProps> = ({ meetings, handleShare }) => {
 
   useEffect(() => {
     if (chatOpen && chatEndRef.current) {
-        chatEndRef.current.scrollIntoView();
+        chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [messages, chatOpen]);
 
