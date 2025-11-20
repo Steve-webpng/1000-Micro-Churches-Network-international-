@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, memo } from 'react';
 import { SmallGroup, Page } from '../types';
 import { IconSearch, IconX, IconUsers } from '../components/Icons';
@@ -79,9 +80,17 @@ const GroupsPage: React.FC<GroupsPageProps> = ({ smallGroups, addToast, supabase
                                 <span className="text-xs font-bold uppercase text-primary-600 dark:text-primary-500 mb-1 tracking-wider">{group.topic}</span>
                                 <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100 mb-2">{group.name}</h3>
                                 <p className="text-sm text-slate-500 dark:text-slate-400">Leader: {group.leader}</p>
-                                <p className="text-sm text-slate-500 dark:text-slate-400">Schedule: {group.schedule}</p>
-                                <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-700 text-center">
-                                    <span className="text-primary-600 dark:text-primary-500 font-bold">View Details</span>
+                                <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">Schedule: {group.schedule}</p>
+                                <div className="mt-auto pt-4 border-t border-slate-100 dark:border-slate-700">
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleJoinRequest(group);
+                                        }}
+                                        className="w-full bg-primary-600 text-white py-2 rounded-lg text-sm font-bold shadow hover:bg-primary-700 transition-colors"
+                                    >
+                                        Request to Join
+                                    </button>
                                 </div>
                             </div>
                         </div>

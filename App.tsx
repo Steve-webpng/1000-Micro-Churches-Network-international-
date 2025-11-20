@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, memo } from 'react';
 import Navigation from './components/Navigation';
-import { Page, UserRole, Sermon, Event, PrayerRequest, Meeting, SlideshowImage, ChurchBranch, User, PhotoAlbum, Announcement, Resource, Notification, SmallGroup, Post } from './types';
+import { Page, UserRole, Sermon, Event, PrayerRequest, Meeting, SlideshowImage, ChurchBranch, User, PhotoAlbum, Announcement, Resource, Notification, SmallGroup, Post, Conversation } from './types';
 import { getVerseOfDay, generatePrayerResponse } from './services/geminiService';
 import { supabase } from './services/supabaseClient';
 import Meetings from './pages/Meetings';
@@ -19,6 +19,8 @@ import ResourcesPage from './pages/ResourcesPage';
 import TithePage from './pages/TithePage';
 import GroupsPage from './pages/GroupsPage';
 import CommunityPage from './pages/CommunityPage';
+import ViewProfilePage from './pages/ViewProfilePage';
+import MessagesPage from './pages/MessagesPage';
 import { IconX, IconArrowUp, IconLoader, IconBell } from './components/Icons';
 
 const App: React.FC = () => {
@@ -44,9 +46,11 @@ const App: React.FC = () => {
   const [resources, setResources] = useState<Resource[]>([]);
   const [smallGroups, setSmallGroups] = useState<SmallGroup[]>([]);
   const [posts, setPosts] = useState<Post[]>([]);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
 
   // User Data
   const [currentUserProfile, setCurrentUserProfile] = useState<User | null>(null);
+  const [viewingProfile, setViewingProfile] = useState<User | null>(null);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
 
@@ -59,7 +63,7 @@ const App: React.FC = () => {
   const [showBackToTop, setShowBackToTop] = useState(false);
 
   // --- SUPABASE FETCHING ---
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (userId?: string) => {
     setLoading(true);
     try {
         const { data: s } = await supabase.from('sermons').select('*').order('created_at', { ascending: false });
@@ -89,8 +93,8 @@ const App: React.FC = () => {
         const { data: g } = await supabase.from('small_groups').select('*').order('created_at', { ascending: false });
         if (g) setSmallGroups(g as SmallGroup[]);
 
-        const { data: po } = await supabase.from('posts').select('*, profiles(name), likes(*), comments(*, profiles(name))').order('created_at', { ascending: false });
-        if (po) setPosts(po as Post[]);
+        const { data: po } = await supabase.from('posts').select('*, profiles(id, name, avatar_url), likes(*), comments(*, profiles(id, name, avatar_url))').order('created_at', { ascending: false });
+        if (po) setPosts(po as any[]);
         
         const { data: pa } = await supabase.from('photo_albums').select('*');
         if (pa) {
@@ -99,6 +103,16 @@ const App: React.FC = () => {
                 return { ...album, photos: photos || [] };
             }));
             setPhotoAlbums(albumsWithPhotos);
+        }
+
+        if (userId) {
+          const { data: convos } = await supabase
+            .from('conversations')
+            .select('*, conversation_participants!inner(user_id, profiles(id, name, avatar_url)), messages!inner(*)')
+            .eq('conversation_participants.user_id', userId)
+            .order('created_at', { foreignTable: 'messages', ascending: false })
+            .limit(1, { foreignTable: 'messages' });
+          if (convos) setConversations(convos as any[]);
         }
 
     } catch (error) {
@@ -136,15 +150,32 @@ const App: React.FC = () => {
     }
   }, []);
 
+  const fetchUserProfile = async (userId: string) => {
+      const { data: profile } = await supabase.from('profiles').select('*').eq('id', userId).single();
+      if (!profile) return;
+      const { data: saved } = await supabase.from('saved_sermons').select('sermon_id').eq('user_id', userId);
+      const savedIds = saved ? saved.map((s: any) => s.sermon_id) : [];
+      
+      setCurrentUserProfile({
+          id: profile.id,
+          name: profile.name,
+          email: profile.email,
+          avatar_url: profile.avatar_url,
+          bio: profile.bio,
+          savedSermonIds: savedIds
+      });
+  };
+
   useEffect(() => {
-    fetchData();
-    
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSupabaseUser(session?.user ?? null);
       if (session?.user) {
-          fetchUserProfile(session.user.id, session.user.email || '');
+          fetchUserProfile(session.user.id);
           fetchUserRole(session.user.id);
           fetchNotifications(session.user.id);
+          fetchData(session.user.id);
+      } else {
+          fetchData();
       }
     });
 
@@ -153,32 +184,21 @@ const App: React.FC = () => {
     } = supabase.auth.onAuthStateChange((_event, session) => {
       setSupabaseUser(session?.user ?? null);
       if (session?.user) {
-          fetchUserProfile(session.user.id, session.user.email || '');
+          fetchUserProfile(session.user.id);
           fetchUserRole(session.user.id);
           fetchNotifications(session.user.id);
+          fetchData(session.user.id);
       } else {
           setCurrentUserProfile(null);
           setUserRole(null);
           setNotifications([]);
           setUnreadCount(0);
+          fetchData();
       }
     });
 
     return () => subscription.unsubscribe();
   }, [fetchData, fetchNotifications]);
-
-  const fetchUserProfile = async (userId: string, email: string) => {
-      const { data: saved } = await supabase.from('saved_sermons').select('sermon_id').eq('user_id', userId);
-      const savedIds = saved ? saved.map((s: any) => s.sermon_id) : [];
-
-      const { data: profile } = await supabase.from('profiles').select('name').eq('id', userId).single();
-      
-      setCurrentUserProfile({
-          name: profile?.name || email.split('@')[0],
-          email: email,
-          savedSermonIds: savedIds
-      });
-  };
 
   useEffect(() => {
     if (darkMode) document.documentElement.classList.add('dark');
@@ -192,12 +212,20 @@ const App: React.FC = () => {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  const setPage = useCallback((page: Page) => {
+  const setPage = useCallback((page: Page, state?: any) => {
+      if (page === Page.VIEW_PROFILE && state?.user) {
+        setViewingProfile(state.user);
+      } else {
+        setViewingProfile(null);
+      }
       setPageHistory(prev => [...prev, page]);
       window.scrollTo(0, 0);
   }, []);
 
-  const goBack = useCallback(() => setPageHistory(prev => prev.slice(0, -1)), []);
+  const goBack = useCallback(() => {
+      setViewingProfile(null);
+      setPageHistory(prev => prev.slice(0, -1));
+  }, []);
 
   useEffect(() => {
     if (!verse && !verseLoading) {
@@ -230,9 +258,9 @@ const App: React.FC = () => {
     const response = await generatePrayerResponse(content);
     if (data && data[0]) {
         await supabase.from('prayers').update({ ai_response: response }).eq('id', data[0].id);
-        fetchData();
+        fetchData(supabaseUser?.id);
     }
-  }, [addToast, fetchData]);
+  }, [addToast, fetchData, supabaseUser]);
   
   const handleSaveSermon = useCallback(async (sermonId: string) => {
     if(!supabaseUser) { addToast("Please log in to save sermons."); setPage(Page.PROFILE); return; }
@@ -286,12 +314,14 @@ const App: React.FC = () => {
         case Page.PRAYER: return <PrayerPage prayers={prayers} handlePrayerSubmit={handlePrayerSubmit} setPrayers={setPrayers} addToast={addToast} />;
         case Page.MAP: return <MapPage branches={branches} />;
         case Page.GALLERY: return <GalleryPage albums={photoAlbums} />;
-        case Page.PROFILE: return <ProfilePage supabaseUser={supabaseUser} currentUser={currentUserProfile} savedSermons={savedSermonsList} setPage={setPage} openVideoModal={openVideoModal} addToast={addToast} fetchData={fetchData} />;
+        case Page.PROFILE: return <ProfilePage supabaseUser={supabaseUser} currentUser={currentUserProfile} savedSermons={savedSermonsList} setPage={setPage} openVideoModal={openVideoModal} addToast={addToast} fetchData={() => fetchData(supabaseUser?.id)} />;
+        case Page.VIEW_PROFILE: return <ViewProfilePage viewingProfile={viewingProfile} setPage={setPage} currentUser={currentUserProfile} />;
         case Page.RESOURCES: return <ResourcesPage resources={resources} />;
         case Page.TITHE: return <TithePage />;
         case Page.GROUPS: return <GroupsPage smallGroups={smallGroups} addToast={addToast} supabaseUser={supabaseUser} setPage={setPage} />;
-        case Page.COMMUNITY: return <CommunityPage posts={posts} fetchData={fetchData} supabaseUser={supabaseUser} currentUser={currentUserProfile} addToast={addToast} userRole={userRole} />;
-        case Page.ADMIN: return <AdminPage userRole={userRole} handleLogin={handleAdminLogin} prayers={prayers} setPrayers={setPrayers} sermons={sermons} setSermons={setSermons} events={events} setEvents={setEvents} meetings={meetings} setMeetings={setMeetings} verse={verse} setVerse={setVerse} slideshowImages={slideshowImages} setSlideshowImages={setSlideshowImages} branches={branches} setBranches={setBranches} photoAlbums={photoAlbums} setPhotoAlbums={setPhotoAlbums} announcements={announcements} setAnnouncements={setAnnouncements} resources={resources} setResources={setResources} addToast={addToast} supabaseUser={supabaseUser} fetchData={fetchData} smallGroups={smallGroups} setSmallGroups={setSmallGroups} posts={posts} setPosts={setPosts} />;
+        case Page.COMMUNITY: return <CommunityPage posts={posts} fetchData={() => fetchData(supabaseUser?.id)} supabaseUser={supabaseUser} currentUser={currentUserProfile} addToast={addToast} userRole={userRole} setPage={setPage} />;
+        case Page.MESSAGES: return <MessagesPage conversations={conversations} currentUser={currentUserProfile!} />;
+        case Page.ADMIN: return <AdminPage userRole={userRole} handleLogin={handleAdminLogin} prayers={prayers} setPrayers={setPrayers} sermons={sermons} setSermons={setSermons} events={events} setEvents={setEvents} meetings={meetings} setMeetings={setMeetings} verse={verse} setVerse={setVerse} slideshowImages={slideshowImages} setSlideshowImages={setSlideshowImages} branches={branches} photoAlbums={photoAlbums} setPhotoAlbums={setPhotoAlbums} announcements={announcements} setAnnouncements={setAnnouncements} resources={resources} setResources={setResources} addToast={addToast} supabaseUser={supabaseUser} fetchData={() => fetchData(supabaseUser?.id)} smallGroups={smallGroups} setSmallGroups={setSmallGroups} posts={posts} setPosts={setPosts} />;
         case Page.SEARCH: return <SearchPage sermons={sermons} events={events} meetings={meetings} setPage={setPage} />;
         default: return <HomePage verse={verse} setPage={setPage} slideshowImages={slideshowImages} verseLoading={verseLoading} />;
     }
@@ -323,6 +353,7 @@ const App: React.FC = () => {
         unreadCount={unreadCount}
         onOpenNotifications={handleOpenNotifications}
         onNotificationClick={handleNotificationClick}
+        setViewingProfile={setViewingProfile}
       />
       <main className="pb-20 md:pb-0">{renderPage()}</main>
 

@@ -17,6 +17,8 @@ export enum Page {
   TITHE = 'TITHE',
   GROUPS = 'GROUPS',
   COMMUNITY = 'COMMUNITY',
+  VIEW_PROFILE = 'VIEW_PROFILE',
+  MESSAGES = 'MESSAGES',
 }
 
 export enum UserRole {
@@ -32,9 +34,12 @@ export interface AuthUser extends SupabaseUser {
 }
 
 export interface User {
+  id: string;
   name: string;
   email?: string;
   savedSermonIds: string[];
+  avatar_url?: string;
+  bio?: string;
 }
 
 export interface Sermon {
@@ -212,7 +217,7 @@ export interface Comment {
   post_id: string;
   content: string;
   created_at: string;
-  profiles: { name: string }; // Author info
+  profiles: { name: string, avatar_url?: string }; // Author info
 }
 
 export interface Post {
@@ -221,7 +226,28 @@ export interface Post {
   content: string;
   image_url?: string;
   created_at: string;
-  profiles: { name: string }; // Author info from join
+  profiles: { name: string, avatar_url?: string }; // Author info from join
   likes: Like[];
   comments: Comment[];
+}
+
+export interface Message {
+  id: string;
+  conversation_id: string;
+  sender_id: string;
+  content: string;
+  created_at: string;
+  profiles: { name: string, avatar_url?: string };
+}
+
+export interface ConversationParticipant {
+  user_id: string;
+  profiles: { name: string; avatar_url?: string };
+}
+
+export interface Conversation {
+  id: string;
+  created_at: string;
+  conversation_participants: ConversationParticipant[];
+  messages: Message[]; // Often just the last message
 }

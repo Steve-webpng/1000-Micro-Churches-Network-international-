@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { Page, UserRole, User, Notification } from '../types';
-import { IconHome, IconSermon, IconEvent, IconMeeting, IconPrayer, IconSearch, IconSun, IconMoon, IconArrowLeft, IconMap, IconGallery, IconUser, IconAdmin, IconFile, IconTithe, IconBell, IconUsers, IconMessageSquare } from './Icons';
+import { IconHome, IconSermon, IconEvent, IconMeeting, IconPrayer, IconSearch, IconSun, IconMoon, IconArrowLeft, IconMap, IconGallery, IconUser, IconAdmin, IconFile, IconTithe, IconBell, IconUsers, IconMessageSquare, IconSend } from './Icons';
 import NotificationsPanel from './NotificationsPanel';
 
 interface NavigationProps {
@@ -20,12 +20,14 @@ interface NavigationProps {
   unreadCount: number;
   onOpenNotifications: () => void;
   onNotificationClick: (page: Page, id?: string) => void;
+  setViewingProfile: (user: User | null) => void;
 }
 
 const Navigation: React.FC<NavigationProps> = ({ 
     activePage, setPage, role, currentUser, supabaseUser, onLogout, 
     darkMode, setDarkMode, canGoBack, goBack,
-    notifications, unreadCount, onOpenNotifications, onNotificationClick
+    notifications, unreadCount, onOpenNotifications, onNotificationClick,
+    setViewingProfile
 }) => {
   const [notificationsOpen, setNotificationsOpen] = useState(false);
 
@@ -39,10 +41,11 @@ const Navigation: React.FC<NavigationProps> = ({
     { page: Page.TITHE, icon: <IconTithe className="w-6 h-6" />, label: 'Give' },
     { page: Page.MEETINGS, icon: <IconMeeting className="w-6 h-6" />, label: 'Meet' },
     { page: Page.RESOURCES, icon: <IconFile className="w-6 h-6" />, label: 'Resources' },
-    { page: Page.GALLERY, icon: <IconGallery className="w-6 h-6" />, label: 'Gallery' },
-    { page: Page.MAP, icon: <IconMap className="w-6 h-6" />, label: 'Map' },
-    { page: Page.ADMIN, icon: <IconAdmin className="w-6 h-6" />, label: 'Admin' },
   ];
+
+  if (supabaseUser) {
+    navItems.splice(4, 0, { page: Page.MESSAGES, icon: <IconSend className="w-6 h-6" />, label: 'Messages' });
+  }
   
   const pageTitles: Record<Page, string> = {
     [Page.HOME]: 'Home',
@@ -59,6 +62,8 @@ const Navigation: React.FC<NavigationProps> = ({
     [Page.TITHE]: 'Tithe & Offering',
     [Page.GROUPS]: 'Find Your Community',
     [Page.COMMUNITY]: 'Community Feed',
+    [Page.VIEW_PROFILE]: 'User Profile',
+    [Page.MESSAGES]: 'Direct Messages',
   };
 
   const handleNotificationsToggle = () => {
@@ -72,9 +77,18 @@ const Navigation: React.FC<NavigationProps> = ({
     onOpenNotifications();
   };
 
-  const mobileNavItems = navItems.filter(item => 
-    [Page.HOME, Page.SERMONS, Page.EVENTS, Page.COMMUNITY, Page.PRAYER, Page.TITHE].includes(item.page)
-  );
+  const mobileNavItems = [
+      { page: Page.HOME, icon: <IconHome className="w-6 h-6" />, label: 'Home' },
+      { page: Page.SERMONS, icon: <IconSermon className="w-6 h-6" />, label: 'Sermons' },
+      { page: Page.EVENTS, icon: <IconEvent className="w-6 h-6" />, label: 'Events' },
+      { page: Page.COMMUNITY, icon: <IconMessageSquare className="w-6 h-6" />, label: 'Community' },
+  ];
+
+  if (supabaseUser) {
+      mobileNavItems.push({ page: Page.MESSAGES, icon: <IconSend className="w-6 h-6" />, label: 'Messages' });
+  }
+   mobileNavItems.push({ page: Page.PRAYER, icon: <IconPrayer className="w-6 h-6" />, label: 'Prayer' });
+
 
   return (
     <>
@@ -131,10 +145,14 @@ const Navigation: React.FC<NavigationProps> = ({
           
           <div className="w-px h-6 bg-slate-200 dark:bg-slate-700"></div>
 
-          {supabaseUser ? (
+          {supabaseUser && currentUser ? (
              <button onClick={() => setPage(Page.PROFILE)} className="flex items-center gap-2 text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-primary-600 dark:hover:text-primary-500">
-                <IconUser className="w-5 h-5" />
-                <span>{currentUser?.name || 'Profile'}</span>
+                {currentUser.avatar_url ? (
+                    <img src={currentUser.avatar_url} alt={currentUser.name} className="w-8 h-8 rounded-full object-cover" />
+                ) : (
+                    <div className="w-8 h-8 rounded-full bg-primary-100 dark:bg-primary-900/50 flex items-center justify-center text-primary-600 dark:text-primary-300 font-bold"><IconUser className="w-5 h-5" /></div>
+                )}
+                <span>{currentUser.name}</span>
              </button>
           ) : (
             <button onClick={() => setPage(Page.PROFILE)} className="text-sm text-slate-500 hover:text-primary-600 dark:text-slate-300 dark:hover:text-primary-500">
