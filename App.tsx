@@ -1,7 +1,8 @@
 
+
 import React, { useState, useEffect, useCallback, memo } from 'react';
 import Navigation from './components/Navigation';
-import { Page, UserRole, Sermon, Event, PrayerRequest, Meeting, SlideshowImage, ChurchBranch, User, PhotoAlbum, Announcement, Resource } from './types';
+import { Page, UserRole, Sermon, Event, PrayerRequest, Meeting, SlideshowImage, ChurchBranch, User, PhotoAlbum, Announcement, Resource, Notification, SmallGroup } from './types';
 import { getVerseOfDay, generatePrayerResponse } from './services/geminiService';
 import { supabase } from './services/supabaseClient';
 import Meetings from './pages/Meetings';
@@ -15,6 +16,8 @@ import MapPage from './pages/MapPage';
 import ProfilePage from './pages/ProfilePage';
 import GalleryPage from './pages/GalleryPage';
 import ResourcesPage from './pages/ResourcesPage';
+import TithePage from './pages/TithePage';
+import GroupsPage from './pages/GroupsPage';
 import { IconX, IconArrowUp, IconLoader, IconBell } from './components/Icons';
 
 const App: React.FC = () => {
@@ -38,9 +41,12 @@ const App: React.FC = () => {
   const [photoAlbums, setPhotoAlbums] = useState<PhotoAlbum[]>([]);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [resources, setResources] = useState<Resource[]>([]);
+  const [smallGroups, setSmallGroups] = useState<SmallGroup[]>([]);
 
   // User Data
   const [currentUserProfile, setCurrentUserProfile] = useState<User | null>(null);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   // UI State
   const [videoModal, setVideoModal] = useState<{open: boolean, url: string | null}>({open: false, url: null});
@@ -77,6 +83,9 @@ const App: React.FC = () => {
 
         const { data: r } = await supabase.from('resources').select('*').order('created_at', { ascending: false });
         if (r) setResources(r);
+
+        const { data: g } = await supabase.from('small_groups').select('*').order('created_at', { ascending: false });
+        if (g) setSmallGroups(g as SmallGroup[]);
         
         const { data: pa } = await supabase.from('photo_albums').select('*');
         if (pa) {
@@ -107,15 +116,30 @@ const App: React.FC = () => {
       }
   };
 
+  const fetchNotifications = useCallback(async (userId: string) => {
+    if (!userId) return;
+    const { data, error } = await supabase
+        .from('notifications')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(20);
+
+    if (data) {
+        setNotifications(data as Notification[]);
+        setUnreadCount(data.filter(n => !n.is_read).length);
+    }
+  }, []);
+
   useEffect(() => {
     fetchData();
     
-    // Auth Listener
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSupabaseUser(session?.user ?? null);
       if (session?.user) {
           fetchUserProfile(session.user.id, session.user.email || '');
           fetchUserRole(session.user.id);
+          fetchNotifications(session.user.id);
       }
     });
 
@@ -126,28 +150,31 @@ const App: React.FC = () => {
       if (session?.user) {
           fetchUserProfile(session.user.id, session.user.email || '');
           fetchUserRole(session.user.id);
+          fetchNotifications(session.user.id);
       } else {
           setCurrentUserProfile(null);
           setUserRole(null);
+          setNotifications([]);
+          setUnreadCount(0);
       }
     });
 
     return () => subscription.unsubscribe();
-  }, [fetchData]);
+  }, [fetchData, fetchNotifications]);
 
   const fetchUserProfile = async (userId: string, email: string) => {
-      // Fetch saved sermons for this user
       const { data: saved } = await supabase.from('saved_sermons').select('sermon_id').eq('user_id', userId);
-      const savedIds = saved ? saved.map((item: any) => item.sermon_id) : [];
+      const savedIds = saved ? saved.map((s: any) => s.sermon_id) : [];
+
+      const { data: profile } = await supabase.from('profiles').select('name').eq('id', userId).single();
       
       setCurrentUserProfile({
-          name: email.split('@')[0], // Fallback name
+          name: profile?.name || email.split('@')[0],
           email: email,
           savedSermonIds: savedIds
       });
   };
 
-  // --- THEMING & SCROLL ---
   useEffect(() => {
     if (darkMode) document.documentElement.classList.add('dark');
     else document.documentElement.classList.remove('dark');
@@ -160,8 +187,6 @@ const App: React.FC = () => {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // --- ACTIONS ---
-
   const setPage = useCallback((page: Page) => {
       setPageHistory(prev => [...prev, page]);
       window.scrollTo(0, 0);
@@ -169,7 +194,6 @@ const App: React.FC = () => {
 
   const goBack = useCallback(() => setPageHistory(prev => prev.slice(0, -1)), []);
 
-  // Fetch verse on load if not present
   useEffect(() => {
     if (!verse && !verseLoading) {
         setVerseLoading(true);
@@ -193,37 +217,21 @@ const App: React.FC = () => {
   }, [addToast]);
 
   const handlePrayerSubmit = useCallback(async (name: string, content: string) => {
-    // Insert into Supabase
     const { data, error } = await supabase.from('prayers').insert([
         { name, content, status: 'PENDING', prayer_count: 0 }
     ]).select();
-    
-    if (error) {
-        addToast("Error submitting prayer.");
-        return;
-    }
-    
-    // Optimistic update
+    if (error) { addToast("Error submitting prayer."); return; }
     if (data) setPrayers(prev => [data[0] as unknown as PrayerRequest, ...prev]);
-
-    // AI Response
     const response = await generatePrayerResponse(content);
     if (data && data[0]) {
         await supabase.from('prayers').update({ ai_response: response }).eq('id', data[0].id);
-        // Refresh data
         fetchData();
     }
   }, [addToast, fetchData]);
   
   const handleSaveSermon = useCallback(async (sermonId: string) => {
-    if(!supabaseUser) {
-        addToast("Please log in to save sermons.");
-        setPage(Page.PROFILE);
-        return;
-    }
-
+    if(!supabaseUser) { addToast("Please log in to save sermons."); setPage(Page.PROFILE); return; }
     const isSaved = currentUserProfile?.savedSermonIds.includes(sermonId);
-    
     if (isSaved) {
         await supabase.from('saved_sermons').delete().match({ user_id: supabaseUser.id, sermon_id: sermonId });
         setCurrentUserProfile(prev => prev ? ({...prev, savedSermonIds: prev.savedSermonIds.filter(id => id !== sermonId)}) : null);
@@ -235,10 +243,7 @@ const App: React.FC = () => {
     }
   }, [supabaseUser, currentUserProfile, addToast, setPage]);
 
-  const handleAdminLogin = useCallback((role: UserRole) => { 
-      setUserRole(role); 
-      setPage(Page.ADMIN); 
-  }, [setPage]);
+  const handleAdminLogin = useCallback((role: UserRole) => { setUserRole(role); setPage(Page.ADMIN); }, [setPage]);
 
   const openVideoModal = useCallback((url: string) => {
       let embedUrl = url;
@@ -252,24 +257,35 @@ const App: React.FC = () => {
       setVideoModal({ open: true, url: embedUrl });
   }, []);
 
+  const handleOpenNotifications = useCallback(async () => {
+    if (!supabaseUser || unreadCount === 0) return;
+    const unreadIds = notifications.filter(n => !n.is_read).map(n => n.id);
+    setUnreadCount(0);
+    setNotifications(prev => prev.map(n => ({...n, is_read: true})));
+    const { error } = await supabase.from('notifications').update({ is_read: true }).in('id', unreadIds);
+    if (error) { console.error("Error marking notifications as read:", error); fetchNotifications(supabaseUser.id); }
+  }, [supabaseUser, unreadCount, notifications, fetchNotifications]);
+
+  const handleNotificationClick = useCallback((page: Page, id?: string) => {
+    setPage(page);
+  }, [setPage]);
+
   const renderPage = () => {
     const savedSermonsList = sermons.filter(s => currentUserProfile?.savedSermonIds.includes(s.id));
-
-    if (loading) {
-        return <div className="flex items-center justify-center min-h-screen"><IconLoader className="w-10 h-10 text-primary-600" /></div>;
-    }
-
+    if (loading) { return <div className="flex items-center justify-center min-h-screen"><IconLoader className="w-10 h-10 text-primary-600" /></div>; }
     switch (currentPage) {
         case Page.HOME: return <HomePage verse={verse} setPage={setPage} slideshowImages={slideshowImages} verseLoading={verseLoading} />;
-        case Page.SERMONS: return <SermonsPage sermons={sermons} openVideoModal={openVideoModal} handleShare={handleShare} currentUser={currentUserProfile} handleSaveSermon={handleSaveSermon} />;
+        case Page.SERMONS: return <SermonsPage sermons={sermons} openVideoModal={openVideoModal} handleShare={handleShare} currentUser={currentUserProfile} handleSaveSermon={handleSaveSermon} supabaseUser={supabaseUser} />;
         case Page.EVENTS: return <EventsPage events={events} handleShare={handleShare} />;
         case Page.MEETINGS: return <Meetings meetings={meetings} handleShare={handleShare} />;
         case Page.PRAYER: return <PrayerPage prayers={prayers} handlePrayerSubmit={handlePrayerSubmit} setPrayers={setPrayers} addToast={addToast} />;
         case Page.MAP: return <MapPage branches={branches} />;
         case Page.GALLERY: return <GalleryPage albums={photoAlbums} />;
-        case Page.PROFILE: return <ProfilePage supabaseUser={supabaseUser} currentUser={currentUserProfile} savedSermons={savedSermonsList} setPage={setPage} openVideoModal={openVideoModal} />;
+        case Page.PROFILE: return <ProfilePage supabaseUser={supabaseUser} currentUser={currentUserProfile} savedSermons={savedSermonsList} setPage={setPage} openVideoModal={openVideoModal} addToast={addToast} fetchData={fetchData} />;
         case Page.RESOURCES: return <ResourcesPage resources={resources} />;
-        case Page.ADMIN: return <AdminPage userRole={userRole} handleLogin={handleAdminLogin} prayers={prayers} setPrayers={setPrayers} sermons={sermons} setSermons={setSermons} events={events} setEvents={setEvents} meetings={meetings} setMeetings={setMeetings} verse={verse} setVerse={setVerse} slideshowImages={slideshowImages} setSlideshowImages={setSlideshowImages} branches={branches} setBranches={setBranches} photoAlbums={photoAlbums} setPhotoAlbums={setPhotoAlbums} announcements={announcements} setAnnouncements={setAnnouncements} resources={resources} setResources={setResources} addToast={addToast} supabaseUser={supabaseUser} fetchData={fetchData} />;
+        case Page.TITHE: return <TithePage />;
+        case Page.GROUPS: return <GroupsPage smallGroups={smallGroups} addToast={addToast} supabaseUser={supabaseUser} setPage={setPage} />;
+        case Page.ADMIN: return <AdminPage userRole={userRole} handleLogin={handleAdminLogin} prayers={prayers} setPrayers={setPrayers} sermons={sermons} setSermons={setSermons} events={events} setEvents={setEvents} meetings={meetings} setMeetings={setMeetings} verse={verse} setVerse={setVerse} slideshowImages={slideshowImages} setSlideshowImages={setSlideshowImages} branches={branches} setBranches={setBranches} photoAlbums={photoAlbums} setPhotoAlbums={setPhotoAlbums} announcements={announcements} setAnnouncements={setAnnouncements} resources={resources} setResources={setResources} addToast={addToast} supabaseUser={supabaseUser} fetchData={fetchData} smallGroups={smallGroups} setSmallGroups={setSmallGroups} />;
         case Page.SEARCH: return <SearchPage sermons={sermons} events={events} meetings={meetings} setPage={setPage} />;
         default: return <HomePage verse={verse} setPage={setPage} slideshowImages={slideshowImages} verseLoading={verseLoading} />;
     }
@@ -277,7 +293,6 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-primary-50 dark:bg-slate-900 font-sans text-slate-800 dark:text-slate-200">
-      {/* Global Announcement Banner */}
       {announcements.length > 0 && (
           <div className="bg-slate-900 dark:bg-black text-white p-3 text-center text-sm font-medium relative z-[60]">
              <div className="flex items-center justify-center gap-2 animate-pulse-slow">
@@ -298,10 +313,13 @@ const App: React.FC = () => {
         setDarkMode={setDarkMode} 
         canGoBack={pageHistory.length > 1} 
         goBack={goBack} 
+        notifications={notifications}
+        unreadCount={unreadCount}
+        onOpenNotifications={handleOpenNotifications}
+        onNotificationClick={handleNotificationClick}
       />
       <main className="pb-20 md:pb-0">{renderPage()}</main>
 
-      {/* Toast Notifications */}
       <div className="fixed bottom-24 md:bottom-6 right-6 z-[150] space-y-2">
           {toasts.map(toast => (
               <div key={toast.id} className="bg-slate-800 text-white px-4 py-2 rounded-lg shadow-lg animate-fade-in-up">

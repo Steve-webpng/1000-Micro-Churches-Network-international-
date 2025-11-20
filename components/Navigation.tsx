@@ -1,7 +1,9 @@
 
-import React from 'react';
-import { Page, UserRole, User } from '../types';
-import { IconHome, IconSermon, IconEvent, IconMeeting, IconPrayer, IconSearch, IconSun, IconMoon, IconArrowLeft, IconMap, IconGallery, IconUser, IconAdmin, IconFile } from './Icons';
+
+import React, { useState } from 'react';
+import { Page, UserRole, User, Notification } from '../types';
+import { IconHome, IconSermon, IconEvent, IconMeeting, IconPrayer, IconSearch, IconSun, IconMoon, IconArrowLeft, IconMap, IconGallery, IconUser, IconAdmin, IconFile, IconTithe, IconBell, IconUsers } from './Icons';
+import NotificationsPanel from './NotificationsPanel';
 
 interface NavigationProps {
   activePage: Page;
@@ -14,16 +16,27 @@ interface NavigationProps {
   setDarkMode: (dark: boolean) => void;
   canGoBack: boolean;
   goBack: () => void;
+  notifications: Notification[];
+  unreadCount: number;
+  onOpenNotifications: () => void;
+  onNotificationClick: (page: Page, id?: string) => void;
 }
 
-const Navigation: React.FC<NavigationProps> = ({ activePage, setPage, role, currentUser, supabaseUser, onLogout, darkMode, setDarkMode, canGoBack, goBack }) => {
+const Navigation: React.FC<NavigationProps> = ({ 
+    activePage, setPage, role, currentUser, supabaseUser, onLogout, 
+    darkMode, setDarkMode, canGoBack, goBack,
+    notifications, unreadCount, onOpenNotifications, onNotificationClick
+}) => {
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
 
   const navItems = [
     { page: Page.HOME, icon: <IconHome className="w-6 h-6" />, label: 'Home' },
     { page: Page.SERMONS, icon: <IconSermon className="w-6 h-6" />, label: 'Sermons' },
     { page: Page.EVENTS, icon: <IconEvent className="w-6 h-6" />, label: 'Events' },
-    { page: Page.MEETINGS, icon: <IconMeeting className="w-6 h-6" />, label: 'Meet' },
+    { page: Page.GROUPS, icon: <IconUsers className="w-6 h-6" />, label: 'Groups' },
     { page: Page.PRAYER, icon: <IconPrayer className="w-6 h-6" />, label: 'Prayer' },
+    { page: Page.TITHE, icon: <IconTithe className="w-6 h-6" />, label: 'Give' },
+    { page: Page.MEETINGS, icon: <IconMeeting className="w-6 h-6" />, label: 'Meet' },
     { page: Page.RESOURCES, icon: <IconFile className="w-6 h-6" />, label: 'Resources' },
     { page: Page.GALLERY, icon: <IconGallery className="w-6 h-6" />, label: 'Gallery' },
     { page: Page.MAP, icon: <IconMap className="w-6 h-6" />, label: 'Map' },
@@ -42,6 +55,19 @@ const Navigation: React.FC<NavigationProps> = ({ activePage, setPage, role, curr
     [Page.GALLERY]: 'Photo Gallery',
     [Page.PROFILE]: 'My Profile',
     [Page.RESOURCES]: 'Resources Library',
+    [Page.TITHE]: 'Tithe & Offering',
+    [Page.GROUPS]: 'Find Your Community',
+  };
+
+  const handleNotificationsToggle = () => {
+    if (!notificationsOpen && unreadCount > 0) {
+      onOpenNotifications();
+    }
+    setNotificationsOpen(!notificationsOpen);
+  };
+
+  const handleMarkAllRead = () => {
+    onOpenNotifications();
   };
 
   return (
@@ -54,7 +80,7 @@ const Navigation: React.FC<NavigationProps> = ({ activePage, setPage, role, curr
         </div>
 
         <nav className="flex items-center space-x-6">
-          {navItems.slice(0, 8).map((item) => (
+          {navItems.slice(0, 9).map((item) => (
             <button
               key={item.label}
               onClick={() => setPage(item.page)}
@@ -75,6 +101,24 @@ const Navigation: React.FC<NavigationProps> = ({ activePage, setPage, role, curr
           <button onClick={() => setPage(Page.SEARCH)} className="text-slate-500 hover:text-primary-600 dark:text-slate-400 dark:hover:text-primary-500">
              <IconSearch className="w-5 h-5" />
           </button>
+          
+          {supabaseUser && (
+            <div className="relative">
+              <button onClick={handleNotificationsToggle} className="text-slate-500 hover:text-primary-600 dark:text-slate-400 dark:hover:text-primary-500 relative">
+                 <IconBell className="w-5 h-5" />
+                 {unreadCount > 0 && <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white dark:border-slate-900"></span>}
+              </button>
+              {notificationsOpen && (
+                <NotificationsPanel 
+                  notifications={notifications} 
+                  onClose={() => setNotificationsOpen(false)}
+                  onNotificationClick={onNotificationClick}
+                  onMarkAllRead={handleMarkAllRead}
+                />
+              )}
+            </div>
+          )}
+
           <button onClick={() => setPage(Page.ADMIN)} className={`text-slate-500 hover:text-primary-600 dark:text-slate-400 dark:hover:text-primary-500 ${activePage === Page.ADMIN ? 'text-primary-600' : ''}`} title="Admin Dashboard">
              <IconAdmin className="w-5 h-5" />
           </button>
@@ -120,7 +164,23 @@ const Navigation: React.FC<NavigationProps> = ({ activePage, setPage, role, curr
             )}
           </div>
           <span className="font-bold text-primary-600 dark:text-primary-500 text-center">{activePage === Page.HOME ? '1000 Micro Church' : pageTitles[activePage]}</span>
-          <div className="w-10 flex justify-end">
+          <div className="w-auto flex justify-end items-center gap-4">
+            {supabaseUser && (
+              <div className="relative">
+                <button onClick={handleNotificationsToggle} className="text-slate-500 dark:text-slate-400 relative">
+                   <IconBell className="w-5 h-5" />
+                   {unreadCount > 0 && <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white dark:border-slate-900"></span>}
+                </button>
+                {notificationsOpen && (
+                  <NotificationsPanel 
+                    notifications={notifications} 
+                    onClose={() => setNotificationsOpen(false)}
+                    onNotificationClick={onNotificationClick}
+                    onMarkAllRead={handleMarkAllRead}
+                  />
+                )}
+              </div>
+            )}
             <button onClick={() => setPage(Page.SEARCH)}>
               <IconSearch className="w-5 h-5 text-slate-500 dark:text-slate-400" />
             </button>

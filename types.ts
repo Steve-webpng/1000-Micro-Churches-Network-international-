@@ -1,4 +1,5 @@
 
+
 import { User as SupabaseUser } from '@supabase/supabase-js';
 
 export enum Page {
@@ -13,6 +14,8 @@ export enum Page {
   GALLERY = 'GALLERY',
   PROFILE = 'PROFILE',
   RESOURCES = 'RESOURCES',
+  TITHE = 'TITHE',
+  GROUPS = 'GROUPS',
 }
 
 export enum UserRole {
@@ -44,6 +47,14 @@ export interface Sermon {
   videoUrl?: string;
   audioUrl?: string;
   created_at?: string;
+}
+
+export interface SermonNote {
+  id: string;
+  sermon_id: string;
+  user_id: string;
+  content: string;
+  updated_at: string;
 }
 
 export interface Event {
@@ -144,5 +155,45 @@ export interface Resource {
   description: string;
   category: string;
   fileUrl: string;
+  created_at?: string;
+}
+
+export interface ConnectSubmission {
+  id: string;
+  name: string;
+  email: string;
+  phone?: string;
+  type: string; // 'First Time', 'Serving', etc.
+  message: string;
+  created_at?: string;
+}
+
+export interface GivingRecord {
+    id: string;
+    date: string;
+    amount: number;
+    type: 'Tithe' | 'Offering' | 'Special Gift';
+    method: 'Mobile Money' | 'Bank' | 'In-Person';
+}
+
+export interface Notification {
+  id: string;
+  user_id: string;
+  message: string;
+  link_to_page?: Page;
+  link_to_id?: string;
+  is_read: boolean;
+  created_at: string;
+}
+
+export interface SmallGroup {
+  id: string; // UUID
+  name: string;
+  leader: string;
+  topic: string;
+  description: string;
+  schedule: string;
+  location: string;
+  imageUrl: string;
   created_at?: string;
 }

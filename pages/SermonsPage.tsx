@@ -1,7 +1,8 @@
 
-import React, { useState, memo } from 'react';
+import React, { useState, memo, useEffect } from 'react';
 import { Sermon, User } from '../types';
-import { IconBookmark, IconShare, IconHeadphones } from '../components/Icons';
+import { IconBookmark, IconShare, IconHeadphones, IconPen, IconLoader } from '../components/Icons';
+import { supabase } from '../services/supabaseClient';
 
 interface SermonsPageProps {
   sermons: Sermon[];
@@ -9,11 +10,16 @@ interface SermonsPageProps {
   handleShare: (title: string, text: string, url: string) => void;
   currentUser: User | null;
   handleSaveSermon: (sermonId: string) => void;
+  supabaseUser: any;
 }
 
-const SermonsPage: React.FC<SermonsPageProps> = ({ sermons, openVideoModal, handleShare, currentUser, handleSaveSermon }) => {
+const SermonsPage: React.FC<SermonsPageProps> = ({ sermons, openVideoModal, handleShare, currentUser, handleSaveSermon, supabaseUser }) => {
     const [filterSeries, setFilterSeries] = useState('All');
     const [filterSpeaker, setFilterSpeaker] = useState('All');
+    const [activeNoteSermon, setActiveNoteSermon] = useState<string | null>(null);
+    const [noteContent, setNoteContent] = useState('');
+    const [noteLoading, setNoteLoading] = useState(false);
+    const [noteSaving, setNoteSaving] = useState(false);
 
     const allSeries = ['All', ...Array.from(new Set(sermons.map(s => s.series).filter(Boolean))) as string[]];
     const allSpeakers = ['All', ...Array.from(new Set(sermons.map(s => s.speaker)))];
@@ -24,8 +30,46 @@ const SermonsPage: React.FC<SermonsPageProps> = ({ sermons, openVideoModal, hand
         return seriesMatch && speakerMatch;
     });
 
+    const openNotes = async (sermonId: string) => {
+        if (!supabaseUser) {
+            alert("Please login to take notes.");
+            return;
+        }
+        setActiveNoteSermon(sermonId);
+        setNoteLoading(true);
+        setNoteContent('');
+        
+        // Fetch existing note
+        const { data } = await supabase.from('sermon_notes')
+            .select('content')
+            .eq('user_id', supabaseUser.id)
+            .eq('sermon_id', sermonId)
+            .single();
+            
+        if (data) setNoteContent(data.content);
+        setNoteLoading(false);
+    };
+
+    const saveNote = async () => {
+        if (!activeNoteSermon || !supabaseUser) return;
+        setNoteSaving(true);
+        
+        const { error } = await supabase.from('sermon_notes').upsert({
+            user_id: supabaseUser.id,
+            sermon_id: activeNoteSermon,
+            content: noteContent,
+            updated_at: new Date().toISOString()
+        }, { onConflict: 'user_id, sermon_id' });
+
+        setNoteSaving(false);
+        if (error) console.error(error);
+        else {
+            setActiveNoteSermon(null); // Close after save
+        }
+    };
+
     return (
-        <div className="container mx-auto p-6 max-w-6xl animate-fade-in">
+        <div className="container mx-auto p-6 max-w-6xl animate-fade-in relative">
             <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
                 <h2 className="text-3xl font-bold text-slate-800 dark:text-slate-100">Sermons</h2>
                 <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto">
@@ -72,14 +116,19 @@ const SermonsPage: React.FC<SermonsPageProps> = ({ sermons, openVideoModal, hand
                                 </div>
                             )}
 
-                            <div className="mt-6 flex gap-2">
-                               {sermon.videoUrl && (
-                                    <button onClick={() => openVideoModal(sermon.videoUrl!)} className="flex-1 bg-primary-600 text-white px-4 py-2 rounded-lg text-sm font-bold shadow hover:bg-primary-700">
-                                    Watch Video
+                            <div className="mt-6 flex flex-col gap-2">
+                                <div className="flex gap-2">
+                                   {sermon.videoUrl && (
+                                        <button onClick={() => openVideoModal(sermon.videoUrl!)} className="flex-1 bg-primary-600 text-white px-4 py-2 rounded-lg text-sm font-bold shadow hover:bg-primary-700">
+                                        Watch
+                                        </button>
+                                    )}
+                                    <button onClick={() => handleShare('Check out this sermon', sermon.title, `https://1000micro.church/sermon/${sermon.id}`)} className="border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-700">
+                                      <IconShare className="w-4 h-4" />
                                     </button>
-                                )}
-                                <button onClick={() => handleShare('Check out this sermon', sermon.title, `https://1000micro.church/sermon/${sermon.id}`)} className="border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-700">
-                                  <IconShare className="w-4 h-4" />
+                                </div>
+                                <button onClick={() => openNotes(sermon.id)} className="w-full flex items-center justify-center gap-2 text-sm text-slate-500 dark:text-slate-400 hover:text-primary-600 dark:hover:text-primary-400 py-2 border border-dashed border-slate-300 dark:border-slate-700 rounded-lg hover:border-primary-500">
+                                    <IconPen className="w-4 h-4" /> Take Notes
                                 </button>
                             </div>
                         </div>
@@ -93,6 +142,33 @@ const SermonsPage: React.FC<SermonsPageProps> = ({ sermons, openVideoModal, hand
                  </div>
             )}
 
+            {/* Notes Modal */}
+            {activeNoteSermon && (
+                <div className="fixed inset-0 z-[100] bg-black/50 backdrop-blur-sm flex justify-end">
+                    <div className="w-full max-w-md bg-white dark:bg-slate-900 h-full shadow-2xl p-6 animate-slide-in-right flex flex-col">
+                        <div className="flex justify-between items-center mb-6">
+                            <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100">Sermon Notes</h3>
+                            <button onClick={() => setActiveNoteSermon(null)} className="text-slate-500 hover:text-slate-800 dark:hover:text-white">Close</button>
+                        </div>
+                        {noteLoading ? (
+                            <div className="flex-1 flex items-center justify-center"><IconLoader className="w-8 h-8 text-primary-500"/></div>
+                        ) : (
+                            <div className="flex-1 flex flex-col gap-4">
+                                <textarea 
+                                    value={noteContent}
+                                    onChange={e => setNoteContent(e.target.value)}
+                                    className="flex-1 w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4 focus:ring-2 focus:ring-primary-500 outline-none resize-none"
+                                    placeholder="Write your thoughts here..."
+                                ></textarea>
+                                <button onClick={saveNote} disabled={noteSaving} className="w-full bg-primary-600 text-white py-3 rounded-xl font-bold hover:bg-primary-700 disabled:opacity-50 flex justify-center items-center gap-2">
+                                    {noteSaving && <IconLoader className="w-4 h-4"/>}
+                                    Save Notes
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

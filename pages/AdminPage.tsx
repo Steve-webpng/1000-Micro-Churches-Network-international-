@@ -1,8 +1,9 @@
 
-import React, { useState, memo } from 'react';
-import { Page, UserRole, PrayerRequest, Sermon, Event, Meeting, SlideshowImage, ChurchBranch, PhotoAlbum, Photo, Announcement, Resource } from '../types';
+
+import React, { useState, memo, useEffect } from 'react';
+import { Page, UserRole, PrayerRequest, Sermon, Event, Meeting, SlideshowImage, PhotoAlbum, Announcement, Resource, ConnectSubmission, SmallGroup } from '../types';
 import { seedSermons, seedEvents } from '../services/geminiService';
-import { IconTrash, IconPlus, IconLoader, IconMegaphone, IconBell, IconVideo, IconMapPin, IconFile } from '../components/Icons';
+import { IconTrash, IconPlus, IconLoader, IconMegaphone, IconVideo, IconMapPin, IconFile, IconMail, IconBell, IconUsers } from '../components/Icons';
 import { supabase } from '../services/supabaseClient';
 
 interface AdminPageProps {
@@ -20,8 +21,6 @@ interface AdminPageProps {
   setVerse: React.Dispatch<React.SetStateAction<{ text: string; ref: string; } | null>>;
   slideshowImages: SlideshowImage[];
   setSlideshowImages: React.Dispatch<React.SetStateAction<SlideshowImage[]>>;
-  branches: ChurchBranch[];
-  setBranches: React.Dispatch<React.SetStateAction<ChurchBranch[]>>;
   photoAlbums: PhotoAlbum[];
   setPhotoAlbums: React.Dispatch<React.SetStateAction<PhotoAlbum[]>>;
   addToast: (message: string) => void;
@@ -31,6 +30,8 @@ interface AdminPageProps {
   setAnnouncements: React.Dispatch<React.SetStateAction<Announcement[]>>;
   resources: Resource[];
   setResources: React.Dispatch<React.SetStateAction<Resource[]>>;
+  smallGroups: SmallGroup[];
+  setSmallGroups: React.Dispatch<React.SetStateAction<SmallGroup[]>>;
 }
 
 const AdminPage: React.FC<AdminPageProps> = (props) => {
@@ -46,13 +47,11 @@ const AdminPage: React.FC<AdminPageProps> = (props) => {
     setAuthError('');
 
     try {
-        // 1. Authenticate User
         const { data: { user }, error: signInError } = await supabase.auth.signInWithPassword({ email, password });
         
         if (signInError) throw signInError;
         if (!user) throw new Error("Authentication failed");
 
-        // 2. Check Admin Role in 'profiles' table
         const { data: profile, error: profileError } = await supabase
             .from('profiles')
             .select('role')
@@ -68,7 +67,6 @@ const AdminPage: React.FC<AdminPageProps> = (props) => {
              throw new Error("Access Denied: You do not have Administrator privileges.");
         }
 
-        // 3. Success
         props.handleLogin(UserRole.ADMIN);
 
     } catch (error: any) {
@@ -82,19 +80,20 @@ const AdminPage: React.FC<AdminPageProps> = (props) => {
     switch (activeTab) {
         case 'Dashboard': return <Dashboard {...props} />;
         case 'Announcements': return <AnnouncementManagement {...props} />;
+        case 'Connect Cards': return <ConnectManagement {...props} />;
         case 'Prayers': return <PrayerManagement {...props} />;
         case 'Sermons': return <SermonManagement {...props} />;
         case 'Events': return <EventManagement {...props} />;
         case 'Meetings': return <MeetingManagement {...props} />;
         case 'Slideshow': return <SlideshowManagement {...props} />;
         case 'Gallery': return <GalleryManagement {...props} />;
-        case 'Branches': return <BranchManagement {...props} />;
         case 'Resources': return <ResourceManagement {...props} />;
+        case 'Notifications': return <NotificationManagement {...props} />;
+        case 'Groups': return <GroupManagement {...props} />;
         default: return null;
     }
   };
 
-  // 1. Not Logged In
   if (!props.supabaseUser) {
     return (
       <div className="flex items-center justify-center min-h-[60vh] animate-fade-in">
@@ -118,7 +117,6 @@ const AdminPage: React.FC<AdminPageProps> = (props) => {
     );
   }
 
-  // 2. Logged In but NOT Admin (RBAC Check)
   if (props.userRole !== UserRole.ADMIN) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] animate-fade-in">
@@ -138,7 +136,7 @@ const AdminPage: React.FC<AdminPageProps> = (props) => {
     );
   }
 
-  const tabs = ['Dashboard', 'Announcements', 'Prayers', 'Sermons', 'Events', 'Meetings', 'Slideshow', 'Gallery', 'Branches', 'Resources'];
+  const tabs = ['Dashboard', 'Announcements', 'Connect Cards', 'Prayers', 'Sermons', 'Events', 'Meetings', 'Slideshow', 'Gallery', 'Resources', 'Notifications', 'Groups'];
 
   return (
     <div className="container mx-auto p-6 animate-fade-in">
@@ -184,103 +182,101 @@ const Dashboard: React.FC<AdminPageProps> = ({ prayers, sermons, events, meeting
     </div>
 );
 
-const AnnouncementManagement: React.FC<AdminPageProps> = ({ announcements, setAnnouncements, addToast, fetchData }) => {
+const NotificationManagement: React.FC<AdminPageProps> = ({ addToast, supabaseUser }) => {
     const [message, setMessage] = useState('');
-    const [type, setType] = useState<'INFO' | 'ALERT' | 'SUCCESS'>('INFO');
+    const [linkToPage, setLinkToPage] = useState<Page>(Page.HOME);
+    const [loading, setLoading] = useState(false);
 
-    const handleSubmit = async (e: React.FormEvent) => {
+    const handleSend = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!message.trim()) return;
-        await supabase.from('announcements').insert([{ message, type, isActive: true }]);
-        fetchData();
-        setMessage('');
-        addToast("Announcement posted.");
-    };
-
-    const toggleStatus = async (id: string, currentStatus: boolean) => {
-        await supabase.from('announcements').update({ isActive: !currentStatus }).eq('id', id);
-        fetchData();
-    };
-
-    const handleDelete = async (id: string) => {
-        await supabase.from('announcements').delete().eq('id', id);
-        fetchData();
-        addToast("Announcement deleted.");
+        if (!message.trim() || !supabaseUser) return;
+        setLoading(true);
+        const { error } = await supabase.from('notifications').insert({
+            user_id: supabaseUser.id,
+            message,
+            link_to_page: linkToPage
+        });
+        setLoading(false);
+        if (error) {
+            addToast(`Error: ${error.message}`);
+        } else {
+            addToast('Test notification sent to yourself!');
+            setMessage('');
+        }
     };
 
     return (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <form onSubmit={handleSubmit} className="md:col-span-1 bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 space-y-4 h-fit">
-                <h3 className="text-xl font-bold flex items-center gap-2 text-slate-800 dark:text-slate-100"><IconMegaphone className="w-5 h-5 text-primary-500"/> Post Announcement</h3>
-                <textarea value={message} onChange={e => setMessage(e.target.value)} placeholder="Message..." required className="w-full text-sm bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg p-3 focus:ring-2 focus:ring-primary-500 outline-none" rows={3}></textarea>
-                <select value={type} onChange={e => setType(e.target.value as any)} className="w-full text-sm bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg p-3 focus:ring-2 focus:ring-primary-500 outline-none">
-                    <option value="INFO">Information (Blue)</option>
-                    <option value="ALERT">Alert (Red)</option>
-                    <option value="SUCCESS">Success (Green)</option>
+        <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 max-w-md mx-auto">
+            <h2 className="text-xl font-bold mb-4 text-slate-800 dark:text-slate-100 flex items-center gap-2"><IconBell className="w-5 h-5 text-primary-500" /> Send Test Notification</h2>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">Send a notification to your own account to test the system. You may need to refresh the app to see it.</p>
+            <form onSubmit={handleSend} className="space-y-4">
+                <textarea value={message} onChange={e => setMessage(e.target.value)} placeholder="Notification Message" required className="w-full text-sm bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg p-3" rows={3}></textarea>
+                <select value={linkToPage} onChange={e => setLinkToPage(e.target.value as Page)} className="w-full text-sm bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg p-3">
+                    {Object.values(Page).map(p => <option key={p} value={p}>{p}</option>)}
                 </select>
-                <button type="submit" className="w-full bg-primary-600 text-white py-2.5 rounded-lg font-bold hover:bg-primary-700 transition-colors">Post Announcement</button>
+                <button type="submit" disabled={loading} className="w-full bg-primary-600 text-white py-2.5 rounded-lg font-bold hover:bg-primary-700 transition-colors flex items-center justify-center">
+                    {loading ? <IconLoader className="w-5 h-5"/> : 'Send Notification'}
+                </button>
             </form>
-            <div className="md:col-span-2 bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700">
-                 <h3 className="text-xl font-bold mb-4 text-slate-800 dark:text-slate-100">Active Announcements</h3>
-                 <div className="space-y-3">
-                    {announcements.map(item => (
-                        <div key={item.id} className={`flex items-center justify-between p-4 rounded-lg border ${item.isActive ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20' : 'border-slate-200 dark:border-slate-700 opacity-60'}`}>
-                            <div>
-                                <p className="font-semibold text-slate-800 dark:text-slate-100">{item.message}</p>
-                                <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full mt-1 inline-block ${
-                                    item.type === 'ALERT' ? 'bg-red-100 text-red-800' : item.type === 'SUCCESS' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'
-                                }`}>{item.type}</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <button onClick={() => toggleStatus(item.id, item.isActive)} className={`text-xs px-3 py-1.5 rounded-md font-medium transition-colors ${item.isActive ? 'bg-green-100 text-green-700 hover:bg-green-200' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
-                                    {item.isActive ? 'Active' : 'Inactive'}
-                                </button>
-                                <button onClick={() => handleDelete(item.id)} className="text-red-500 hover:text-red-700 p-2 hover:bg-red-50 rounded-full transition-colors"><IconTrash className="w-4 h-4"/></button>
-                            </div>
-                        </div>
-                    ))}
-                    {announcements.length === 0 && <p className="text-slate-500 text-sm italic text-center py-4">No announcements found.</p>}
-                 </div>
-            </div>
         </div>
     );
 };
 
-const PrayerManagement: React.FC<AdminPageProps> = ({ prayers, setPrayers, addToast, fetchData }) => {
-  const pendingPrayers = prayers.filter(p => p.status === 'PENDING');
+const ConnectManagement: React.FC<AdminPageProps> = ({ addToast }) => {
+    const [submissions, setSubmissions] = useState<ConnectSubmission[]>([]);
+    const [loading, setLoading] = useState(true);
 
-  const handleApprove = async (id: string) => {
-    await supabase.from('prayers').update({ status: 'APPROVED' }).eq('id', id);
-    fetchData();
-    addToast("Prayer request approved.");
-  };
+    const fetchSubmissions = async () => {
+        setLoading(true);
+        const { data } = await supabase.from('connect_submissions').select('*').order('created_at', { ascending: false });
+        if (data) setSubmissions(data as ConnectSubmission[]);
+        setLoading(false);
+    };
 
-  const handleDelete = async (id: string) => {
-    await supabase.from('prayers').delete().eq('id', id);
-    fetchData();
-    addToast("Prayer request deleted.");
-  };
-  
-  return (
-      <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700">
-        <h2 className="text-xl font-bold mb-4 text-slate-800 dark:text-slate-100">Pending Prayer Requests ({pendingPrayers.length})</h2>
-        <div className="space-y-4">
-          {pendingPrayers.map(p => (
-            <div key={p.id} className="border-b border-slate-200 dark:border-slate-700 pb-4 last:border-0">
-              <p className="font-semibold text-slate-800 dark:text-slate-100">{p.name}</p>
-              <p className="text-slate-600 dark:text-slate-300 my-2 italic">"{p.content}"</p>
-              <div className="flex gap-3 mt-3">
-                <button onClick={() => handleApprove(p.id)} className="bg-green-500 text-white px-4 py-1.5 text-sm font-medium rounded-lg hover:bg-green-600 transition-colors">Approve</button>
-                <button onClick={() => handleDelete(p.id)} className="bg-red-500 text-white px-4 py-1.5 text-sm font-medium rounded-lg hover:bg-red-600 transition-colors">Delete</button>
-              </div>
-            </div>
-          ))}
-          {pendingPrayers.length === 0 && <p className="text-slate-500 italic text-center py-8">No pending requests.</p>}
+    useEffect(() => {
+        fetchSubmissions();
+    }, []);
+
+    const handleDelete = async (id: string) => {
+        await supabase.from('connect_submissions').delete().eq('id', id);
+        fetchSubmissions();
+        addToast("Submission deleted.");
+    };
+
+    return (
+        <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700">
+            <h2 className="text-xl font-bold mb-4 text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                <IconMail className="w-5 h-5 text-primary-500" /> Connect Card Submissions
+            </h2>
+            {loading ? (
+                <div className="flex justify-center py-10"><IconLoader className="w-8 h-8 text-primary-500"/></div>
+            ) : (
+                <div className="space-y-4">
+                    {submissions.length === 0 ? <p className="text-center text-slate-500 py-8">No submissions yet.</p> : 
+                    submissions.map(sub => (
+                        <div key={sub.id} className="border border-slate-200 dark:border-slate-700 p-4 rounded-lg relative group">
+                            <div className="flex justify-between items-start">
+                                <div>
+                                    <h3 className="font-bold text-slate-800 dark:text-slate-100">{sub.name}</h3>
+                                    <div className="text-sm text-slate-500 dark:text-slate-400 flex gap-3 mt-1">
+                                        <span>{sub.email}</span>
+                                        {sub.phone && <span>• {sub.phone}</span>}
+                                    </div>
+                                </div>
+                                <span className="bg-primary-100 text-primary-700 text-xs font-bold px-2 py-1 rounded-full">{sub.type}</span>
+                            </div>
+                            <p className="mt-3 text-slate-600 dark:text-slate-300 text-sm bg-slate-50 dark:bg-slate-900 p-3 rounded border border-slate-100 dark:border-slate-800">"{sub.message}"</p>
+                            <p className="text-xs text-slate-400 mt-2">{new Date(sub.created_at || '').toLocaleString()}</p>
+                            <button onClick={() => handleDelete(sub.id)} className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity bg-red-100 text-red-500 p-1 rounded hover:bg-red-200"><IconTrash className="w-4 h-4"/></button>
+                        </div>
+                    ))}
+                </div>
+            )}
         </div>
-      </div>
-  );
+    );
 };
 
+// ... Reused Components ...
 const ImageUploader: React.FC<{onImageSelect: (url: string) => void, label?: string, accept?: string}> = ({ onImageSelect, label = "Upload Image", accept = "image/*" }) => {
     const [uploading, setUploading] = useState(false);
     const [preview, setPreview] = useState<string | null>(null);
@@ -289,22 +285,18 @@ const ImageUploader: React.FC<{onImageSelect: (url: string) => void, label?: str
     const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
-
         setUploading(true);
         try {
             const fileExt = file.name.split('.').pop();
             const fileName = `${Date.now()}.${fileExt}`;
-            // Upload to 'images' bucket. 
             const { error: uploadError } = await supabase.storage.from('images').upload(fileName, file);
-
             if (uploadError) throw uploadError;
-
             const { data } = supabase.storage.from('images').getPublicUrl(fileName);
             setPreview(data.publicUrl);
             onImageSelect(data.publicUrl);
         } catch (error) {
-            console.error('Error uploading file:', error);
-            alert('Error uploading. Ensure you have a public "images" bucket.');
+            console.error(error);
+            alert('Error uploading file.');
         } finally {
             setUploading(false);
         }
@@ -321,433 +313,234 @@ const ImageUploader: React.FC<{onImageSelect: (url: string) => void, label?: str
     );
 };
 
+const AnnouncementManagement: React.FC<AdminPageProps> = ({ announcements, setAnnouncements, addToast, fetchData }) => {
+    const [message, setMessage] = useState('');
+    const [type, setType] = useState<'INFO' | 'ALERT' | 'SUCCESS'>('INFO');
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!message.trim()) return;
+        await supabase.from('announcements').insert([{ message, type, isActive: true }]);
+        fetchData();
+        setMessage('');
+        addToast("Announcement posted.");
+    };
+    const toggleStatus = async (id: string, currentStatus: boolean) => {
+        await supabase.from('announcements').update({ isActive: !currentStatus }).eq('id', id);
+        fetchData();
+    };
+    const handleDelete = async (id: string) => {
+        await supabase.from('announcements').delete().eq('id', id);
+        fetchData();
+    };
+    return (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <form onSubmit={handleSubmit} className="md:col-span-1 bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 space-y-4 h-fit">
+                <h3 className="text-xl font-bold flex items-center gap-2 text-slate-800 dark:text-slate-100"><IconMegaphone className="w-5 h-5 text-primary-500"/> Post Announcement</h3>
+                <textarea value={message} onChange={e => setMessage(e.target.value)} placeholder="Message..." required className="w-full text-sm bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg p-3 focus:ring-2 focus:ring-primary-500 outline-none" rows={3}></textarea>
+                <select value={type} onChange={e => setType(e.target.value as any)} className="w-full text-sm bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg p-3 focus:ring-2 focus:ring-primary-500 outline-none">
+                    <option value="INFO">Information (Blue)</option>
+                    <option value="ALERT">Alert (Red)</option>
+                    <option value="SUCCESS">Success (Green)</option>
+                </select>
+                <button type="submit" className="w-full bg-primary-600 text-white py-2.5 rounded-lg font-bold hover:bg-primary-700 transition-colors">Post Announcement</button>
+            </form>
+            <div className="md:col-span-2 bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700">
+                 <div className="space-y-3">
+                    {announcements.map(item => (
+                        <div key={item.id} className={`flex items-center justify-between p-4 rounded-lg border ${item.isActive ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20' : 'border-slate-200 dark:border-slate-700 opacity-60'}`}>
+                            <div><p className="font-semibold text-slate-800 dark:text-slate-100">{item.message}</p></div>
+                            <div className="flex items-center gap-2">
+                                <button onClick={() => toggleStatus(item.id, item.isActive)} className="text-xs px-3 py-1.5 bg-slate-100 dark:bg-slate-700 rounded hover:bg-slate-200">{item.isActive ? 'Active' : 'Inactive'}</button>
+                                <button onClick={() => handleDelete(item.id)} className="text-red-500 hover:bg-red-50 p-2 rounded"><IconTrash className="w-4 h-4"/></button>
+                            </div>
+                        </div>
+                    ))}
+                 </div>
+            </div>
+        </div>
+    );
+};
 
-const SermonManagement: React.FC<AdminPageProps> = ({ sermons, setSermons, addToast, fetchData }) => {
+const PrayerManagement: React.FC<AdminPageProps> = ({ prayers, addToast, fetchData }) => {
+  const pendingPrayers = prayers.filter(p => p.status === 'PENDING');
+  const handleApprove = async (id: string) => { await supabase.from('prayers').update({ status: 'APPROVED' }).eq('id', id); fetchData(); addToast("Approved."); };
+  const handleDelete = async (id: string) => { await supabase.from('prayers').delete().eq('id', id); fetchData(); addToast("Deleted."); };
+  return (
+      <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700">
+        <h2 className="text-xl font-bold mb-4 text-slate-800 dark:text-slate-100">Pending Prayers ({pendingPrayers.length})</h2>
+        <div className="space-y-4">
+          {pendingPrayers.map(p => (
+            <div key={p.id} className="border-b border-slate-200 dark:border-slate-700 pb-4">
+              <p className="font-semibold text-slate-800 dark:text-slate-100">{p.name}: "{p.content}"</p>
+              <div className="flex gap-3 mt-3">
+                <button onClick={() => handleApprove(p.id)} className="bg-green-500 text-white px-3 py-1 rounded hover:bg-green-600 text-sm">Approve</button>
+                <button onClick={() => handleDelete(p.id)} className="bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600 text-sm">Delete</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+  );
+};
+
+const SermonManagement: React.FC<AdminPageProps> = ({ sermons, addToast, fetchData }) => {
   const [form, setForm] = useState({ title: '', speaker: '', series: '', date: '', description: '', imageUrl: '', videoUrl: '', audioUrl: '' });
-  const [isSeeding, setIsSeeding] = useState(false);
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
-  };
-  
-  const handleImageSelect = (url: string) => {
-    setForm({...form, imageUrl: url});
-  };
-
+  const handleChange = (e: any) => setForm({ ...form, [e.target.name]: e.target.value });
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const { error } = await supabase.from('sermons').insert([form]);
-    if (error) {
-        addToast("Error adding sermon.");
-    } else {
-        fetchData();
-        setForm({ title: '', speaker: '', series: '', date: '', description: '', imageUrl: '', videoUrl: '', audioUrl: '' });
-        addToast("Sermon added.");
-    }
-  };
-
-  const handleDelete = async (id: string) => {
-    await supabase.from('sermons').delete().eq('id', id);
+    await supabase.from('sermons').insert([form]);
     fetchData();
-    addToast("Sermon deleted.");
+    setForm({ title: '', speaker: '', series: '', date: '', description: '', imageUrl: '', videoUrl: '', audioUrl: '' });
+    addToast("Sermon added.");
   };
-  
-  const handleSeed = async () => {
-      setIsSeeding(true);
-      await seedSermons();
-      fetchData();
-      setIsSeeding(false);
-      addToast(`Sermons seeded.`);
-  };
-
+  const handleDelete = async (id: string) => { await supabase.from('sermons').delete().eq('id', id); fetchData(); };
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
       <form onSubmit={handleSubmit} className="md:col-span-1 bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 space-y-4 h-fit">
         <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100">Add Sermon</h3>
-        <input name="title" value={form.title} onChange={handleChange} placeholder="Title" required className="w-full text-sm bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg p-3 focus:ring-2 focus:ring-primary-500 outline-none"/>
-        <input name="speaker" value={form.speaker} onChange={handleChange} placeholder="Speaker" required className="w-full text-sm bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg p-3 focus:ring-2 focus:ring-primary-500 outline-none"/>
-        <input name="series" value={form.series} onChange={handleChange} placeholder="Series (Optional)" className="w-full text-sm bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg p-3 focus:ring-2 focus:ring-primary-500 outline-none"/>
-        <input name="date" type="date" value={form.date} onChange={handleChange} required className="w-full text-sm bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg p-3 focus:ring-2 focus:ring-primary-500 outline-none"/>
-        <textarea name="description" value={form.description} onChange={handleChange} placeholder="Description" required className="w-full text-sm bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg p-3 focus:ring-2 focus:ring-primary-500 outline-none" rows={3}></textarea>
-        
-        <div className="space-y-2">
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Cover Image</label>
-            <ImageUploader onImageSelect={handleImageSelect} />
-        </div>
-
-        <input name="videoUrl" value={form.videoUrl} onChange={handleChange} placeholder="YouTube URL (Optional)" className="w-full text-sm bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg p-3 focus:ring-2 focus:ring-primary-500 outline-none"/>
-        <input name="audioUrl" value={form.audioUrl} onChange={handleChange} placeholder="Audio URL (Optional)" className="w-full text-sm bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg p-3 focus:ring-2 focus:ring-primary-500 outline-none"/>
-        
-        <button type="submit" className="w-full bg-primary-600 text-white py-2.5 rounded-lg font-bold hover:bg-primary-700 transition-colors">Publish Sermon</button>
+        <input name="title" value={form.title} onChange={handleChange} placeholder="Title" required className="w-full bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded p-2 text-sm"/>
+        <input name="speaker" value={form.speaker} onChange={handleChange} placeholder="Speaker" required className="w-full bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded p-2 text-sm"/>
+        <input name="date" type="date" value={form.date} onChange={handleChange} required className="w-full bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded p-2 text-sm"/>
+        <textarea name="description" value={form.description} onChange={handleChange} placeholder="Desc" required className="w-full bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded p-2 text-sm"/>
+        <ImageUploader onImageSelect={(url) => setForm({...form, imageUrl: url})} />
+        <input name="videoUrl" value={form.videoUrl} onChange={handleChange} placeholder="Video URL" className="w-full bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded p-2 text-sm"/>
+        <input name="audioUrl" value={form.audioUrl} onChange={handleChange} placeholder="Audio URL" className="w-full bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded p-2 text-sm"/>
+        <button type="submit" className="w-full bg-primary-600 text-white py-2 rounded font-bold">Add</button>
       </form>
-      
       <div className="md:col-span-2 bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700">
-        <div className="flex justify-between items-center mb-4">
-            <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100">Manage Sermons ({sermons.length})</h3>
-            <button onClick={handleSeed} disabled={isSeeding} className="flex items-center text-sm bg-slate-100 dark:bg-slate-700 px-3 py-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 disabled:opacity-50 font-medium transition-colors">
-                {isSeeding && <IconLoader className="w-4 h-4 mr-2 animate-spin" />} Seed with AI
-            </button>
-        </div>
-        <div className="space-y-2 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
-          {sermons.map(s => (
-            <div key={s.id} className="flex items-center justify-between p-3 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors border border-transparent hover:border-slate-200 dark:hover:border-slate-600">
-              <div className="flex items-center gap-4">
-                <img src={s.imageUrl} alt={s.title} className="w-16 h-10 object-cover rounded shadow-sm"/>
-                <div>
-                    <p className="font-semibold text-slate-800 dark:text-slate-100">{s.title}</p>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">{s.speaker} • {s.date}</p>
-                </div>
-              </div>
-              <button onClick={() => handleDelete(s.id)} className="text-slate-400 hover:text-red-500 p-2 rounded-full hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"><IconTrash className="w-4 h-4"/></button>
+        <div className="space-y-2 max-h-[500px] overflow-y-auto">{sermons.map(s => (
+            <div key={s.id} className="flex justify-between p-2 hover:bg-slate-50 dark:hover:bg-slate-700 rounded">
+                <span>{s.title}</span>
+                <button onClick={() => handleDelete(s.id)} className="text-red-500"><IconTrash className="w-4 h-4"/></button>
             </div>
-          ))}
-        </div>
+        ))}</div>
       </div>
     </div>
   );
 };
 
-
-const EventManagement: React.FC<AdminPageProps> = ({ events, setEvents, addToast, fetchData }) => {
+const EventManagement: React.FC<AdminPageProps> = ({ events, addToast, fetchData }) => {
     const [form, setForm] = useState({ title: '', date: '', location: '', description: ''});
-    const [isSeeding, setIsSeeding] = useState(false);
-
-    const handleSubmit = async (e: React.FormEvent) => {
-      e.preventDefault();
-      await supabase.from('events').insert([form]);
-      fetchData();
-      setForm({ title: '', date: '', location: '', description: '' });
-      addToast("Event added.");
-    };
-
-    const handleDelete = async (id: string) => {
-        await supabase.from('events').delete().eq('id', id);
-        fetchData();
-        addToast("Event deleted.");
-    };
-
-    const handleSeed = async () => {
-      setIsSeeding(true);
-      await seedEvents();
-      fetchData();
-      setIsSeeding(false);
-      addToast(`Events seeded.`);
-    };
-
+    const handleSubmit = async (e: React.FormEvent) => { e.preventDefault(); await supabase.from('events').insert([form]); fetchData(); addToast("Event added."); setForm({title:'',date:'',location:'',description:''}); };
+    const handleDelete = async (id: string) => { await supabase.from('events').delete().eq('id', id); fetchData(); };
     return (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <form onSubmit={handleSubmit} className="md:col-span-1 bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 space-y-4 h-fit">
-            <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100">Add Event</h3>
-            <input name="title" value={form.title} onChange={e => setForm({...form, title: e.target.value})} placeholder="Title" required className="w-full text-sm bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg p-3 focus:ring-2 focus:ring-primary-500 outline-none"/>
-            <input name="date" type="datetime-local" value={form.date} onChange={e => setForm({...form, date: e.target.value})} required className="w-full text-sm bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg p-3 focus:ring-2 focus:ring-primary-500 outline-none"/>
-            <input name="location" value={form.location} onChange={e => setForm({...form, location: e.target.value})} placeholder="Location" required className="w-full text-sm bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg p-3 focus:ring-2 focus:ring-primary-500 outline-none"/>
-            <textarea name="description" value={form.description} onChange={e => setForm({...form, description: e.target.value})} placeholder="Description" required className="w-full text-sm bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg p-3 focus:ring-2 focus:ring-primary-500 outline-none" rows={3}></textarea>
-            <button type="submit" className="w-full bg-primary-600 text-white py-2.5 rounded-lg font-bold hover:bg-primary-700 transition-colors">Add Event</button>
-          </form>
-          <div className="md:col-span-2 bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100">Manage Events ({events.length})</h3>
-              <button onClick={handleSeed} disabled={isSeeding} className="flex items-center text-sm bg-slate-100 dark:bg-slate-700 px-3 py-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 disabled:opacity-50 font-medium transition-colors">
-                {isSeeding && <IconLoader className="w-4 h-4 mr-2 animate-spin" />} Seed with AI
-              </button>
-            </div>
-            <div className="space-y-2 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
-              {events.map(item => (
-                <div key={item.id} className="flex items-start justify-between p-3 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors border border-transparent hover:border-slate-200 dark:hover:border-slate-600">
-                  <div>
-                    <p className="font-semibold text-slate-800 dark:text-slate-100">{item.title}</p>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">{new Date(item.date).toLocaleString()}</p>
-                  </div>
-                  <button onClick={() => handleDelete(item.id)} className="text-slate-400 hover:text-red-500 p-2 rounded-full hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"><IconTrash className="w-4 h-4"/></button>
-                </div>
-              ))}
-            </div>
-          </div>
+          <form onSubmit={handleSubmit} className="md:col-span-1 bg-white dark:bg-slate-800 p-6 rounded space-y-4"><h3 className="font-bold text-slate-800 dark:text-slate-100">Add Event</h3><input value={form.title} onChange={e=>setForm({...form, title:e.target.value})} placeholder="Title" className="w-full p-2 border rounded bg-slate-50 dark:bg-slate-700"/><input type="datetime-local" value={form.date} onChange={e=>setForm({...form, date:e.target.value})} className="w-full p-2 border rounded bg-slate-50 dark:bg-slate-700"/><button className="w-full bg-primary-600 text-white py-2 rounded">Add</button></form>
+          <div className="md:col-span-2 bg-white dark:bg-slate-800 p-6 rounded space-y-2">{events.map(e => <div key={e.id} className="flex justify-between p-2 border-b"><span className="text-slate-800 dark:text-slate-200">{e.title}</span><button onClick={()=>handleDelete(e.id)} className="text-red-500"><IconTrash className="w-4 h-4"/></button></div>)}</div>
         </div>
     );
 };
 
-const MeetingManagement: React.FC<AdminPageProps> = ({ meetings, setMeetings, addToast, fetchData }) => {
+const MeetingManagement: React.FC<AdminPageProps> = ({ meetings, addToast, fetchData }) => {
     const [form, setForm] = useState({ title: '', host: '', startTime: '', description: '', participants: 0 });
-    
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        await supabase.from('meetings').insert([form]);
-        fetchData();
-        setForm({ title: '', host: '', startTime: '', description: '', participants: 0 });
-        addToast("Meeting scheduled.");
-    };
-    
-    const handleDelete = async (id: string) => {
-        await supabase.from('meetings').delete().eq('id', id);
-        fetchData();
-        addToast("Meeting deleted.");
-    };
-
+    const handleSubmit = async (e: React.FormEvent) => { e.preventDefault(); await supabase.from('meetings').insert([form]); fetchData(); addToast("Meeting added."); setForm({title:'',host:'',startTime:'',description:'',participants:0}); };
+    const handleDelete = async (id: string) => { await supabase.from('meetings').delete().eq('id', id); fetchData(); };
     return (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <form onSubmit={handleSubmit} className="md:col-span-1 bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 space-y-4 h-fit">
-                <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100">Schedule Meeting</h3>
-                <input name="title" value={form.title} onChange={e => setForm({...form, title: e.target.value})} placeholder="Title" required className="w-full text-sm bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg p-3 focus:ring-2 focus:ring-primary-500 outline-none"/>
-                <input name="host" value={form.host} onChange={e => setForm({...form, host: e.target.value})} placeholder="Host Name" required className="w-full text-sm bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg p-3 focus:ring-2 focus:ring-primary-500 outline-none"/>
-                <input name="startTime" type="datetime-local" value={form.startTime} onChange={e => setForm({...form, startTime: e.target.value})} required className="w-full text-sm bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg p-3 focus:ring-2 focus:ring-primary-500 outline-none"/>
-                <textarea name="description" value={form.description} onChange={e => setForm({...form, description: e.target.value})} placeholder="Description" className="w-full text-sm bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg p-3 focus:ring-2 focus:ring-primary-500 outline-none" rows={3}></textarea>
-                <button type="submit" className="w-full bg-primary-600 text-white py-2.5 rounded-lg font-bold hover:bg-primary-700 transition-colors">Schedule</button>
-            </form>
-            <div className="md:col-span-2 bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700">
-                <h3 className="text-xl font-bold mb-4 text-slate-800 dark:text-slate-100">Upcoming Meetings ({meetings.length})</h3>
-                <div className="space-y-2 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
-                    {meetings.map(m => (
-                        <div key={m.id} className="flex items-center justify-between p-3 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors border border-transparent hover:border-slate-200 dark:hover:border-slate-600">
-                            <div className="flex items-center gap-4">
-                                <div className="bg-primary-100 dark:bg-primary-900/30 p-3 rounded-lg text-primary-600 dark:text-primary-400"><IconVideo className="w-6 h-6"/></div>
-                                <div>
-                                    <p className="font-semibold text-slate-800 dark:text-slate-100">{m.title}</p>
-                                    <p className="text-xs text-slate-500 dark:text-slate-400">{m.startTime} • {m.host}</p>
-                                </div>
-                            </div>
-                            <button onClick={() => handleDelete(m.id)} className="text-slate-400 hover:text-red-500 p-2 rounded-full hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"><IconTrash className="w-4 h-4"/></button>
-                        </div>
-                    ))}
-                </div>
-            </div>
+             <form onSubmit={handleSubmit} className="md:col-span-1 bg-white dark:bg-slate-800 p-6 rounded space-y-4"><h3 className="font-bold text-slate-800 dark:text-slate-100">Schedule Meeting</h3><input value={form.title} onChange={e=>setForm({...form, title:e.target.value})} placeholder="Title" className="w-full p-2 border rounded bg-slate-50 dark:bg-slate-700"/><input type="datetime-local" value={form.startTime} onChange={e=>setForm({...form, startTime:e.target.value})} className="w-full p-2 border rounded bg-slate-50 dark:bg-slate-700"/><button className="w-full bg-primary-600 text-white py-2 rounded">Schedule</button></form>
+             <div className="md:col-span-2 bg-white dark:bg-slate-800 p-6 rounded space-y-2">{meetings.map(m => <div key={m.id} className="flex justify-between p-2 border-b"><span className="text-slate-800 dark:text-slate-200">{m.title}</span><button onClick={()=>handleDelete(m.id)} className="text-red-500"><IconTrash className="w-4 h-4"/></button></div>)}</div>
         </div>
     );
 };
 
-const SlideshowManagement: React.FC<AdminPageProps> = ({ slideshowImages, setSlideshowImages, addToast, fetchData }) => {
+const SlideshowManagement: React.FC<AdminPageProps> = ({ slideshowImages, addToast, fetchData }) => {
     const [caption, setCaption] = useState('');
-    const [imageUrl, setImageUrl] = useState('');
-
-    const handleImageSelect = (url: string) => {
-        setImageUrl(url);
-    };
-
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!imageUrl) { addToast("Please upload an image."); return; }
-        
-        await supabase.from('slideshow_images').insert([{ url: imageUrl, caption }]);
-        fetchData();
-        setCaption('');
-        setImageUrl('');
-        addToast("Slide added.");
-    };
-
-    const handleDelete = async (id: string) => {
-        await supabase.from('slideshow_images').delete().eq('id', id);
-        fetchData();
-        addToast("Slide removed.");
-    };
-
+    const [url, setUrl] = useState('');
+    const handleSubmit = async (e: React.FormEvent) => { e.preventDefault(); if(!url) return; await supabase.from('slideshow_images').insert([{url, caption}]); fetchData(); setUrl(''); setCaption(''); addToast("Slide added."); };
+    const handleDelete = async (id: string) => { await supabase.from('slideshow_images').delete().eq('id', id); fetchData(); };
     return (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <form onSubmit={handleSubmit} className="md:col-span-1 bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 space-y-4 h-fit">
-                <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100">Add Slide</h3>
-                <ImageUploader onImageSelect={handleImageSelect} />
-                <input value={caption} onChange={e => setCaption(e.target.value)} placeholder="Caption (Optional)" className="w-full text-sm bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg p-3 focus:ring-2 focus:ring-primary-500 outline-none"/>
-                <button type="submit" className="w-full bg-primary-600 text-white py-2.5 rounded-lg font-bold hover:bg-primary-700 transition-colors">Add Slide</button>
-            </form>
-             <div className="md:col-span-2 bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700">
-                <h3 className="text-xl font-bold mb-4 text-slate-800 dark:text-slate-100">Slides ({slideshowImages.length})</h3>
-                <div className="grid grid-cols-2 gap-4">
-                    {slideshowImages.map(img => (
-                        <div key={img.id} className="relative group rounded-lg overflow-hidden aspect-video">
-                            <img src={img.url} alt={img.caption} className="w-full h-full object-cover" />
-                            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                <button onClick={() => handleDelete(img.id)} className="bg-red-600 text-white p-2 rounded-full hover:bg-red-700"><IconTrash className="w-5 h-5"/></button>
-                            </div>
-                            {img.caption && <p className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-xs p-2 truncate">{img.caption}</p>}
-                        </div>
-                    ))}
-                </div>
-            </div>
+            <form onSubmit={handleSubmit} className="md:col-span-1 bg-white dark:bg-slate-800 p-6 rounded space-y-4"><h3 className="font-bold text-slate-800 dark:text-slate-100">Add Slide</h3><ImageUploader onImageSelect={setUrl}/><input value={caption} onChange={e=>setCaption(e.target.value)} placeholder="Caption" className="w-full p-2 border rounded bg-slate-50 dark:bg-slate-700"/><button className="w-full bg-primary-600 text-white py-2 rounded">Add</button></form>
+            <div className="md:col-span-2 grid grid-cols-2 gap-4 bg-white dark:bg-slate-800 p-6 rounded">{slideshowImages.map(img => <div key={img.id} className="relative group aspect-video"><img src={img.url} className="w-full h-full object-cover"/><button onClick={()=>handleDelete(img.id)} className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white"><IconTrash/></button></div>)}</div>
         </div>
     );
 };
 
-const BranchManagement: React.FC<AdminPageProps> = ({ branches, setBranches, addToast, fetchData }) => {
-    const [form, setForm] = useState({ name: '', leader: '', address: '', lat: '', lng: '', radius: 2000 });
-    
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        const newBranch = {
-            ...form,
-            lat: parseFloat(form.lat),
-            lng: parseFloat(form.lng)
-        };
-        await supabase.from('church_branches').insert([newBranch]);
-        fetchData();
-        setForm({ name: '', leader: '', address: '', lat: '', lng: '', radius: 2000 });
-        addToast("Branch added.");
-    };
-
-    const handleDelete = async (id: string) => {
-        await supabase.from('church_branches').delete().eq('id', id);
-        fetchData();
-        addToast("Branch deleted.");
-    };
-
+const GalleryManagement: React.FC<AdminPageProps> = ({ photoAlbums, addToast, fetchData }) => {
+    const [title, setTitle] = useState('');
+    const handleCreate = async (e:React.FormEvent) => { e.preventDefault(); await supabase.from('photo_albums').insert([{title}]); fetchData(); setTitle(''); addToast("Album created"); };
+    const handleDelete = async (id:string) => { await supabase.from('photo_albums').delete().eq('id', id); fetchData(); };
     return (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <form onSubmit={handleSubmit} className="md:col-span-1 bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 space-y-4 h-fit">
-                <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100">Add Branch</h3>
-                <input value={form.name} onChange={e => setForm({...form, name: e.target.value})} placeholder="Branch Name" required className="w-full text-sm bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg p-3 focus:ring-2 focus:ring-primary-500 outline-none"/>
-                <input value={form.leader} onChange={e => setForm({...form, leader: e.target.value})} placeholder="Leader Name" required className="w-full text-sm bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg p-3 focus:ring-2 focus:ring-primary-500 outline-none"/>
-                <input value={form.address} onChange={e => setForm({...form, address: e.target.value})} placeholder="Address" required className="w-full text-sm bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg p-3 focus:ring-2 focus:ring-primary-500 outline-none"/>
-                <div className="grid grid-cols-2 gap-2">
-                    <input value={form.lat} onChange={e => setForm({...form, lat: e.target.value})} placeholder="Latitude" required type="number" step="any" className="w-full text-sm bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg p-3 focus:ring-2 focus:ring-primary-500 outline-none"/>
-                    <input value={form.lng} onChange={e => setForm({...form, lng: e.target.value})} placeholder="Longitude" required type="number" step="any" className="w-full text-sm bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg p-3 focus:ring-2 focus:ring-primary-500 outline-none"/>
-                </div>
-                <input value={form.radius} onChange={e => setForm({...form, radius: parseInt(e.target.value)})} placeholder="Radius (meters)" required type="number" className="w-full text-sm bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg p-3 focus:ring-2 focus:ring-primary-500 outline-none"/>
-                <button type="submit" className="w-full bg-primary-600 text-white py-2.5 rounded-lg font-bold hover:bg-primary-700 transition-colors">Add Branch</button>
-            </form>
-            <div className="md:col-span-2 bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700">
-                <h3 className="text-xl font-bold mb-4 text-slate-800 dark:text-slate-100">Manage Branches ({branches.length})</h3>
-                <div className="space-y-2 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
-                    {branches.map(b => (
-                        <div key={b.id} className="flex items-center justify-between p-3 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors border border-transparent hover:border-slate-200 dark:hover:border-slate-600">
-                            <div className="flex items-center gap-4">
-                                <div className="bg-primary-100 dark:bg-primary-900/30 p-3 rounded-lg text-primary-600 dark:text-primary-400"><IconMapPin className="w-6 h-6"/></div>
-                                <div>
-                                    <p className="font-semibold text-slate-800 dark:text-slate-100">{b.name}</p>
-                                    <p className="text-xs text-slate-500 dark:text-slate-400">{b.leader} • {b.address}</p>
-                                </div>
-                            </div>
-                            <button onClick={() => handleDelete(b.id)} className="text-slate-400 hover:text-red-500 p-2 rounded-full hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"><IconTrash className="w-4 h-4"/></button>
-                        </div>
-                    ))}
-                </div>
-            </div>
+        <div className="space-y-6">
+            <form onSubmit={handleCreate} className="flex gap-4 bg-white dark:bg-slate-800 p-4 rounded"><input value={title} onChange={e=>setTitle(e.target.value)} placeholder="New Album Title" className="flex-1 p-2 border rounded bg-slate-50 dark:bg-slate-700"/><button className="bg-primary-600 text-white px-4 rounded">Create</button></form>
+            <div className="grid grid-cols-2 gap-4">{photoAlbums.map(a => <div key={a.id} className="bg-white dark:bg-slate-800 p-4 rounded border flex justify-between"><span>{a.title}</span><button onClick={()=>handleDelete(a.id)} className="text-red-500"><IconTrash/></button></div>)}</div>
         </div>
     );
 };
 
-const GalleryManagement: React.FC<AdminPageProps> = ({ photoAlbums, setPhotoAlbums, addToast, fetchData }) => {
-    const [albumTitle, setAlbumTitle] = useState('');
-    const [selectedAlbumId, setSelectedAlbumId] = useState<string | null>(null);
-
-    const handleCreateAlbum = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!albumTitle.trim()) return;
-        await supabase.from('photo_albums').insert([{ title: albumTitle }]);
-        fetchData();
-        setAlbumTitle('');
-        addToast("Album created.");
-    };
-
-    const handleDeleteAlbum = async (id: string) => {
-        await supabase.from('photo_albums').delete().eq('id', id);
-        fetchData();
-        addToast("Album deleted.");
-    };
-
-    const handleAddPhoto = async (url: string) => {
-        if (!selectedAlbumId) return;
-        await supabase.from('photos').insert([{ url, album_id: selectedAlbumId }]);
-        fetchData();
-        addToast("Photo added.");
-    };
-
-    return (
-        <div className="space-y-8">
-            <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700">
-                <h3 className="text-xl font-bold mb-4 text-slate-800 dark:text-slate-100">Create Album</h3>
-                <form onSubmit={handleCreateAlbum} className="flex gap-4">
-                    <input value={albumTitle} onChange={e => setAlbumTitle(e.target.value)} placeholder="Album Title" required className="flex-1 text-sm bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg p-3 focus:ring-2 focus:ring-primary-500 outline-none"/>
-                    <button type="submit" className="bg-primary-600 text-white px-6 py-2.5 rounded-lg font-bold hover:bg-primary-700 transition-colors">Create</button>
-                </form>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {photoAlbums.map(album => (
-                    <div key={album.id} className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700">
-                        <div className="flex justify-between items-center mb-4">
-                            <h4 className="font-bold text-lg text-slate-800 dark:text-slate-100">{album.title}</h4>
-                            <button onClick={() => handleDeleteAlbum(album.id)} className="text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 p-2 rounded-full"><IconTrash className="w-5 h-5"/></button>
-                        </div>
-                        
-                        <div className="grid grid-cols-3 gap-2 mb-4">
-                            {album.photos?.slice(0, 5).map(photo => (
-                                <img key={photo.id} src={photo.url} className="w-full aspect-square object-cover rounded-md border border-slate-200 dark:border-slate-600" />
-                            ))}
-                            {album.photos?.length > 5 && <div className="flex items-center justify-center bg-slate-100 dark:bg-slate-700 rounded-md text-xs text-slate-500">+{album.photos.length - 5} more</div>}
-                        </div>
-
-                        <div onClick={() => setSelectedAlbumId(album.id)}>
-                            <ImageUploader onImageSelect={handleAddPhoto} label="Add Photo to Album" />
-                        </div>
-                    </div>
-                ))}
-            </div>
-        </div>
-    );
-};
-
-const ResourceManagement: React.FC<AdminPageProps> = ({ resources, setResources, addToast, fetchData }) => {
+const ResourceManagement: React.FC<AdminPageProps> = ({ resources, addToast, fetchData }) => {
     const [form, setForm] = useState({ title: '', description: '', category: '', fileUrl: '' });
-
-    const handleFileSelect = (url: string) => {
-        setForm({ ...form, fileUrl: url });
-    };
-
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!form.fileUrl) { addToast("Please upload a file."); return; }
-        await supabase.from('resources').insert([form]);
-        fetchData();
-        setForm({ title: '', description: '', category: '', fileUrl: '' });
-        addToast("Resource added.");
-    };
-
-    const handleDelete = async (id: string) => {
-        await supabase.from('resources').delete().eq('id', id);
-        fetchData();
-        addToast("Resource deleted.");
-    };
-
+    const handleSubmit = async (e:React.FormEvent) => { e.preventDefault(); if(!form.fileUrl) return; await supabase.from('resources').insert([form]); fetchData(); setForm({title:'',description:'',category:'',fileUrl:''}); addToast("Resource added."); };
+    const handleDelete = async (id:string) => { await supabase.from('resources').delete().eq('id', id); fetchData(); };
     return (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <form onSubmit={handleSubmit} className="md:col-span-1 bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 space-y-4 h-fit">
-                <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100">Add Resource</h3>
-                <input value={form.title} onChange={e => setForm({...form, title: e.target.value})} placeholder="Title" required className="w-full text-sm bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg p-3 focus:ring-2 focus:ring-primary-500 outline-none"/>
-                <textarea value={form.description} onChange={e => setForm({...form, description: e.target.value})} placeholder="Description" required className="w-full text-sm bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg p-3 focus:ring-2 focus:ring-primary-500 outline-none" rows={3}></textarea>
-                <select value={form.category} onChange={e => setForm({...form, category: e.target.value})} required className="w-full text-sm bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg p-3 focus:ring-2 focus:ring-primary-500 outline-none">
-                    <option value="">Select Category</option>
-                    <option value="Study Guide">Study Guide</option>
-                    <option value="Policy">Policy</option>
-                    <option value="Children">Children</option>
-                    <option value="Worship">Worship</option>
-                    <option value="Other">Other</option>
-                </select>
-                <div className="space-y-2">
-                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Upload File (PDF/Doc)</label>
-                    <ImageUploader onImageSelect={handleFileSelect} label="Upload Document" accept=".pdf,.doc,.docx,.txt" />
-                </div>
-                <button type="submit" className="w-full bg-primary-600 text-white py-2.5 rounded-lg font-bold hover:bg-primary-700 transition-colors">Add Resource</button>
-            </form>
-            <div className="md:col-span-2 bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700">
-                <h3 className="text-xl font-bold mb-4 text-slate-800 dark:text-slate-100">Manage Resources ({resources?.length || 0})</h3>
-                <div className="space-y-2 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
-                    {resources?.map(r => (
-                        <div key={r.id} className="flex items-center justify-between p-3 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors border border-transparent hover:border-slate-200 dark:hover:border-slate-600">
-                            <div className="flex items-center gap-4">
-                                <div className="bg-primary-100 dark:bg-primary-900/30 p-3 rounded-lg text-primary-600 dark:text-primary-400"><IconFile className="w-6 h-6"/></div>
-                                <div>
-                                    <p className="font-semibold text-slate-800 dark:text-slate-100">{r.title}</p>
-                                    <p className="text-xs text-slate-500 dark:text-slate-400">{r.category}</p>
-                                </div>
-                            </div>
-                            <div className="flex gap-2">
-                                <a href={r.fileUrl} target="_blank" rel="noopener noreferrer" className="text-slate-400 hover:text-primary-600 p-2"><IconFile className="w-4 h-4"/></a>
-                                <button onClick={() => handleDelete(r.id)} className="text-slate-400 hover:text-red-500 p-2 rounded-full hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"><IconTrash className="w-4 h-4"/></button>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            </div>
+            <form onSubmit={handleSubmit} className="md:col-span-1 bg-white dark:bg-slate-800 p-6 rounded space-y-4"><h3 className="font-bold text-slate-800 dark:text-slate-100">Add Resource</h3><input value={form.title} onChange={e=>setForm({...form, title:e.target.value})} placeholder="Title" className="w-full p-2 bg-slate-50 dark:bg-slate-700 border rounded"/><ImageUploader onImageSelect={url=>setForm({...form, fileUrl:url})} label="Upload File"/><button className="w-full bg-primary-600 text-white py-2 rounded">Add</button></form>
+            <div className="md:col-span-2 bg-white dark:bg-slate-800 p-6 rounded space-y-2">{resources.map(r => <div key={r.id} className="flex justify-between p-2 border-b text-slate-800 dark:text-slate-200"><span>{r.title}</span><button onClick={()=>handleDelete(r.id)} className="text-red-500"><IconTrash className="w-4 h-4"/></button></div>)}</div>
         </div>
     );
+};
+
+const GroupManagement: React.FC<AdminPageProps> = ({ smallGroups, addToast, fetchData }) => {
+  const [form, setForm] = useState({ name: '', leader: '', topic: 'Bible Study', schedule: '', location: '', description: '', imageUrl: '' });
+  const [loading, setLoading] = useState(false);
+  const topics = ['Bible Study', 'Men', 'Women', 'Youth', 'Marriage', 'Community Outreach'];
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => setForm({ ...form, [e.target.name]: e.target.value });
+  
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.imageUrl) {
+        addToast("Please upload an image for the group.");
+        return;
+    }
+    setLoading(true);
+    await supabase.from('small_groups').insert([form]);
+    fetchData();
+    setForm({ name: '', leader: '', topic: 'Bible Study', schedule: '', location: '', description: '', imageUrl: '' });
+    addToast("Small group added.");
+    setLoading(false);
+  };
+
+  const handleDelete = async (id: string) => {
+    if (window.confirm("Are you sure you want to delete this group?")) {
+        await supabase.from('small_groups').delete().eq('id', id);
+        fetchData();
+        addToast("Group deleted.");
+    }
+  };
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <form onSubmit={handleSubmit} className="md:col-span-1 bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 space-y-4 h-fit">
+        <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2"><IconUsers className="w-5 h-5 text-primary-500" /> Add Small Group</h3>
+        <input name="name" value={form.name} onChange={handleChange} placeholder="Group Name" required className="w-full bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded p-2 text-sm"/>
+        <input name="leader" value={form.leader} onChange={handleChange} placeholder="Leader Name" required className="w-full bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded p-2 text-sm"/>
+        <select name="topic" value={form.topic} onChange={handleChange} className="w-full bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded p-2 text-sm">
+            {topics.map(t => <option key={t} value={t}>{t}</option>)}
+        </select>
+        <input name="schedule" value={form.schedule} onChange={handleChange} placeholder="Schedule (e.g., Tuesdays at 7pm)" required className="w-full bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded p-2 text-sm"/>
+        <input name="location" value={form.location} onChange={handleChange} placeholder="Location (e.g., Online or Address)" required className="w-full bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded p-2 text-sm"/>
+        <textarea name="description" value={form.description} onChange={handleChange} placeholder="Description" required className="w-full bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded p-2 text-sm" rows={3}/>
+        <ImageUploader onImageSelect={(url) => setForm({...form, imageUrl: url})} label="Upload Group Image" />
+        <button type="submit" disabled={loading} className="w-full bg-primary-600 text-white py-2 rounded font-bold hover:bg-primary-700 disabled:opacity-50 flex items-center justify-center">
+            {loading ? <IconLoader className="w-5 h-5"/> : 'Add Group'}
+        </button>
+      </form>
+      <div className="md:col-span-2 bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700">
+        <div className="space-y-2 max-h-[500px] overflow-y-auto">
+            {smallGroups.map(g => (
+                <div key={g.id} className="flex justify-between items-center p-2 hover:bg-slate-50 dark:hover:bg-slate-700 rounded">
+                    <div>
+                        <p className="font-semibold text-slate-800 dark:text-slate-100">{g.name}</p>
+                        <p className="text-xs text-slate-500">{g.leader}</p>
+                    </div>
+                    <button onClick={() => handleDelete(g.id)} className="text-red-500 hover:bg-red-100 dark:hover:bg-red-900/50 p-2 rounded-full"><IconTrash className="w-4 h-4"/></button>
+                </div>
+            ))}
+        </div>
+      </div>
+    </div>
+  );
 };
 
 export default AdminPage;
